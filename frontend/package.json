@@ -1,1 +1,1 @@
-﻿{"name":"frontend","version":"1.0.0","scripts":{"build":"echo build"},"dependencies":{"vue":"^3.0.0"}}
+{"name":"shopify-order-dashboard","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"vue":"^3.4.27","vue-router":"^4.3.2","pinia":"^2.1.7","axios":"^1.7.2"},"devDependencies":{"@vitejs/plugin-vue":"^5.0.4","typescript":"^5.4.5","vite":"^5.2.11"}}
