@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+venv/
+env/
+.env
+
+# Build
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Nested output (evitar recursión)
+output/
+
+# Cache
+__pycache__/
+*.pyc
+

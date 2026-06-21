@@ -1,0 +1,116 @@
+{
+  "files": [
+    {
+      "path": "docs/product-analysis.md",
+      "size_bytes": 28893,
+      "updated_at": "2026-06-21T00:03:46.186080"
+    },
+    {
+      "path": "docs/architecture.md",
+      "size_bytes": 74154,
+      "updated_at": "2026-06-21T01:42:25.523908"
+    },
+    {
+      "path": "database/schema.sql",
+      "size_bytes": 27507,
+      "updated_at": "2026-06-21T01:45:35.081493"
+    },
+    {
+      "path": "database/migrations/001_initial_schema.sql",
+      "size_bytes": 9661,
+      "updated_at": "2026-06-21T01:46:29.083422"
+    },
+    {
+      "path": "database/migrations/002_indexes.sql",
+      "size_bytes": 6254,
+      "updated_at": "2026-06-21T01:47:06.530213"
+    },
+    {
+      "path": "backend/src/domain/order/value-objects/order-status.vo.ts",
+      "size_bytes": 1522,
+      "updated_at": "2026-06-21T02:53:05.932349"
+    },
+    {
+      "path": "backend/src/domain/order/value-objects/box-type.vo.ts",
+      "size_bytes": 1117,
+      "updated_at": "2026-06-21T02:53:18.945528"
+    },
+    {
+      "path": "legacy/config.php",
+      "size_bytes": 5761,
+      "updated_at": "2026-06-21T02:12:36.616668"
+    },
+    {
+      "path": "output/frontend/vite.config.ts",
+      "size_bytes": 430,
+      "updated_at": "2026-06-21T02:10:40.352847"
+    },
+    {
+      "path": "output/frontend/tsconfig.json",
+      "size_bytes": 668,
+      "updated_at": "2026-06-21T02:10:47.287103"
+    },
+    {
+      "path": "output/frontend/tsconfig.node.json",
+      "size_bytes": 233,
+      "updated_at": "2026-06-21T02:10:51.371776"
+    },
+    {
+      "path": "legacy/health.php",
+      "size_bytes": 3619,
+      "updated_at": "2026-06-21T02:12:36.623565"
+    },
+    {
+      "path": "backend/src/domain/order/value-objects/money.vo.ts",
+      "size_bytes": 1235,
+      "updated_at": "2026-06-21T02:53:31.987517"
+    },
+    {
+      "path": "backend/src/domain/order/entities/order.entity.ts",
+      "size_bytes": 5762,
+      "updated_at": "2026-06-21T02:15:29.580075"
+    },
+    {
+      "path": "backend/src/domain/order/entities/order-item.entity.ts",
+      "size_bytes": 1847,
+      "updated_at": "2026-06-21T02:15:51.456242"
+    },
+    {
+      "path": "backend/src/domain/order/events/order-received.event.ts",
+      "size_bytes": 464,
+      "updated_at": "2026-06-21T02:16:05.756356"
+    },
+    {
+      "path": "backend/src/domain/order/events/order-completed.event.ts",
+      "size_bytes": 488,
+      "updated_at": "2026-06-21T02:16:13.118530"
+    },
+    {
+      "path": "backend/package.json",
+      "size_bytes": 1362,
+      "updated_at": "2026-06-21T02:51:30.036996"
+    },
+    {
+      "path": "backend/src/main.ts",
+      "size_bytes": 2263,
+      "updated_at": "2026-06-21T02:51:49.899574"
+    },
+    {
+      "path": "backend/src/app.module.ts",
+      "size_bytes": 4012,
+      "updated_at": "2026-06-21T02:52:17.577243"
+    },
+    {
+      "path": "backend/src/shared/logger/structured-logger.service.ts",
+      "size_bytes": 1751,
+      "updated_at": "2026-06-21T02:52:33.189163"
+    },
+    {
+      "path": "backend/src/shared/filters/global-exception.filter.ts",
+      "size_bytes": 2444,
+      "updated_at": "2026-06-21T02:52:51.341839"
+    }
+  ],
+  "last_updated": "2026-06-21T02:53:31.987626",
+  "total_files": 22
+}
