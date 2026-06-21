@@ -277,61 +277,57 @@ sequenceDiagram
     participant AL as AuditLogRepository
     participant EP as DomainEventPublisher
 
-    rect rgb(227, 242, 253)
-        Note over S,EP: FASE 1: Recepción y Validación del Webhook
-        S->>WC: POST /webhooks/shopify (orders/create)
-        Note right of S: Headers: X-Shopify-Hmac-SHA256
-        WC->>WS: processWebhook(payload, headers)
-        WS->>WV: validateHmac(payload, signature)
-        WV->>WV: HMAC-SHA256(secret, payload)
-        WV-->>WS: valid = true
-        WS->>IS: checkDuplicate(shopifyOrderId)
-        IS->>WE: findByShopifyOrderId(id)
-        WE-->>IS: null (no existe)
-        IS-->>WS: isDuplicate = false
-        WS->>WE: save(webhookEvent)
-        WE-->>WS: event saved
-        WS->>BP: enqueue("order-processing", { orderId, eventId })
-        Note right of BP: BullMQ: retries=3, backoff=exponential
-        BP-->>WS: job enqueued
-        WS-->>WC: 200 OK
-        WC-->>S: HTTP 200 OK
-    end
+    Note over S,EP: FASE 1: Recepción y Validación del Webhook
+    S->>WC: POST /webhooks/shopify (orders/create)
+    Note right of S: Headers: X-Shopify-Hmac-SHA256
+    WC->>WS: processWebhook(payload, headers)
+    WS->>WV: validateHmac(payload, signature)
+    WV->>WV: HMAC-SHA256(secret, payload)
+    WV-->>WS: valid = true
+    WS->>IS: checkDuplicate(shopifyOrderId)
+    IS->>WE: findByShopifyOrderId(id)
+    WE-->>IS: null (no existe)
+    IS-->>WS: isDuplicate = false
+    WS->>WE: save(webhookEvent)
+    WE-->>WS: event saved
+    WS->>BP: enqueue("order-processing", { orderId, eventId })
+    Note right of BP: BullMQ: retries=3, backoff=exponential
+    BP-->>WS: job enqueued
+    WS-->>WC: 200 OK
+    WC-->>S: HTTP 200 OK
 
-    rect rgb(232, 245, 233)
-        Note over S,EP: FASE 2: Procesamiento Asíncrono de la Orden
-        BC->>OP: consume(job)
-        OP->>OS: transition(ORDER_PROCESSING)
-        Note right of OS: Estado: PROCESSING
-        OP->>MC: calculateMaterials(orderItems)
-        MC->>MC: countProducts(items)
-        Note right of MC: 1-2: BOX_SMALL<br/>3-5: BOX_MEDIUM<br/>6+: BOX_LARGE
-        MC->>MC: addMandatoryMaterials()
-        Note right of MC: + LABEL (1)<br/>+ TAPE (1)
-        MC->>MC: checkFragileItems(items)
-        Note right of MC: Si hay frágiles: + FILLER (1)
-        MC-->>OP: materials: [{BOX_SMALL, 1}, {LABEL, 1}, {TAPE, 1}]
-        OP->>IA: reserveInventory(orderId, materials)
-        IA->>ID: checkAndReserve(materials)
-        ID->>IR: selectForUpdate(materialId)
-        Note right of IR: SELECT ... FOR UPDATE<br/>Bloqueo pesimista a nivel de fila
-        IR-->>ID: stock disponible
-        ID->>ID: verifyAllMaterialsAvailable()
-        Note right of ID: Verifica TODOS los materiales<br/>antes de reservar alguno
-        ID->>IR: decrementStock(materialId, qty)
-        ID->>RR: createReservation(orderId, materials)
-        RR-->>ID: reservation created
-        ID-->>IA: reservation successful
-        IA-->>OP: inventory reserved
-        OP->>OS: transition(ORDER_COMPLETED)
-        Note right of OS: Estado: COMPLETED
-        OP->>RR: consumeReservation(orderId)
-        Note right of RR: Consumo definitivo<br/>de la reserva
-        OP->>AL: logAction(orderId, "ORDER_COMPLETED", details)
-        OP->>EP: publish("OrderCompleted", { orderId, materials })
-        EP-->>BC: event published
-        BC-->>OP: job completed
-    end
+    Note over S,EP: FASE 2: Procesamiento Asíncrono de la Orden
+    BC->>OP: consume(job)
+    OP->>OS: transition(ORDER_PROCESSING)
+    Note right of OS: Estado: PROCESSING
+    OP->>MC: calculateMaterials(orderItems)
+    MC->>MC: countProducts(items)
+    Note right of MC: 1-2: BOX_SMALL<br/>3-5: BOX_MEDIUM<br/>6+: BOX_LARGE
+    MC->>MC: addMandatoryMaterials()
+    Note right of MC: + LABEL (1)<br/>+ TAPE (1)
+    MC->>MC: checkFragileItems(items)
+    Note right of MC: Si hay frágiles: + FILLER (1)
+    MC-->>OP: materials: [{BOX_SMALL, 1}, {LABEL, 1}, {TAPE, 1}]
+    OP->>IA: reserveInventory(orderId, materials)
+    IA->>ID: checkAndReserve(materials)
+    ID->>IR: selectForUpdate(materialId)
+    Note right of IR: SELECT ... FOR UPDATE<br/>Bloqueo pesimista a nivel de fila
+    IR-->>ID: stock disponible
+    ID->>ID: verifyAllMaterialsAvailable()
+    Note right of ID: Verifica TODOS los materiales<br/>antes de reservar alguno
+    ID->>IR: decrementStock(materialId, qty)
+    ID->>RR: createReservation(orderId, materials)
+    RR-->>ID: reservation created
+    ID-->>IA: reservation successful
+    IA-->>OP: inventory reserved
+    OP->>OS: transition(ORDER_COMPLETED)
+    Note right of OS: Estado: COMPLETED
+    OP->>RR: consumeReservation(orderId)
+    Note right of RR: Consumo definitivo<br/>de la reserva
+    OP->>AL: logAction(orderId, "ORDER_COMPLETED", details)
+    OP->>EP: publish("OrderCompleted", { orderId, materials })
+    EP-->>BC: event published
+    BC-->>OP: job completed
 ```
 
 ---
@@ -360,62 +356,56 @@ sequenceDiagram
     participant EP as DomainEventPublisher
     participant SA as StockAlertService
 
-    rect rgb(227, 242, 253)
-        Note over S,EP: FASE 1: Recepción del Webhook (igual que flujo principal)
-        S->>WC: POST /webhooks/shopify (orders/create)
-        WC->>WS: processWebhook(payload, headers)
-        WS->>WS: validateHmac() + checkDuplicate()
-        WS->>BP: enqueue("order-processing", data)
-        WS-->>WC: 200 OK
-        WC-->>S: HTTP 200 OK
-    end
+    Note over S,EP: FASE 1: Recepción del Webhook (igual que flujo principal)
+    S->>WC: POST /webhooks/shopify (orders/create)
+    WC->>WS: processWebhook(payload, headers)
+    WS->>WS: validateHmac() + checkDuplicate()
+    WS->>BP: enqueue("order-processing", data)
+    WS-->>WC: 200 OK
+    WC-->>S: HTTP 200 OK
 
-    rect rgb(255, 235, 238)
-        Note over S,EP: FASE 2: Procesamiento con Fallo de Inventario
-        BC->>OP: consume(job)
-        OP->>OS: transition(ORDER_PROCESSING)
-        OP->>MC: calculateMaterials(orderItems)
-        MC-->>OP: materials: [{BOX_SMALL, 1}, {LABEL, 1}, {TAPE, 1}, {FILLER, 1}]
-        OP->>IA: reserveInventory(orderId, materials)
-        IA->>ID: checkAndReserve(materials)
-        ID->>IR: beginTransaction()
-        Note right of IR: BEGIN TRANSACTION<br/>ISOLATION: SERIALIZABLE
-        ID->>IR: selectForUpdate(BOX_SMALL)
-        IR-->>ID: stock = 1 ✓
-        ID->>IR: selectForUpdate(LABEL)
-        IR-->>ID: stock = 1 ✓
-        ID->>IR: selectForUpdate(TAPE)
-        IR-->>ID: stock = 1 ✓
-        ID->>IR: selectForUpdate(FILLER)
-        IR-->>ID: stock = 0 ✗ INSUFICIENTE
-        ID->>IR: rollbackTransaction()
-        Note right of IR: ROLLBACK<br/>Ningún stock fue modificado<br/>No hay descuentos parciales
-        ID-->>IA: InsufficientStockException<br/>(FILLER: required=1, available=0)
-        IA-->>OP: reservation failed
-        OP->>OS: transition(ORDER_FAILED)
-        Note right of OS: Estado: FAILED<br/>Motivo: "Stock insuficiente: FILLER"
-        OP->>AL: logAction(orderId, "ORDER_FAILED", { reason: "Stock insuficiente: FILLER" })
-        OP->>EP: publish("OrderFailed", { orderId, reason, materials })
-        EP-->>BC: event published
-        OP->>SA: evaluateStockLevels()
-        SA->>IR: checkThreshold(FILLER)
-        IR-->>SA: current=0, threshold=10
-        SA->>EP: publish("LowStockAlert", { material: "FILLER", current: 0, threshold: 10 })
-        BC-->>OP: job completed (no retry)
-    end
+    Note over S,EP: FASE 2: Procesamiento con Fallo de Inventario
+    BC->>OP: consume(job)
+    OP->>OS: transition(ORDER_PROCESSING)
+    OP->>MC: calculateMaterials(orderItems)
+    MC-->>OP: materials: [{BOX_SMALL, 1}, {LABEL, 1}, {TAPE, 1}, {FILLER, 1}]
+    OP->>IA: reserveInventory(orderId, materials)
+    IA->>ID: checkAndReserve(materials)
+    ID->>IR: beginTransaction()
+    Note right of IR: BEGIN TRANSACTION<br/>ISOLATION: SERIALIZABLE
+    ID->>IR: selectForUpdate(BOX_SMALL)
+    IR-->>ID: stock = 1 ✓
+    ID->>IR: selectForUpdate(LABEL)
+    IR-->>ID: stock = 1 ✓
+    ID->>IR: selectForUpdate(TAPE)
+    IR-->>ID: stock = 1 ✓
+    ID->>IR: selectForUpdate(FILLER)
+    IR-->>ID: stock = 0 ✗ INSUFICIENTE
+    ID->>IR: rollbackTransaction()
+    Note right of IR: ROLLBACK<br/>Ningún stock fue modificado<br/>No hay descuentos parciales
+    ID-->>IA: InsufficientStockException<br/>(FILLER: required=1, available=0)
+    IA-->>OP: reservation failed
+    OP->>OS: transition(ORDER_FAILED)
+    Note right of OS: Estado: FAILED<br/>Motivo: "Stock insuficiente: FILLER"
+    OP->>AL: logAction(orderId, "ORDER_FAILED", { reason: "Stock insuficiente: FILLER" })
+    OP->>EP: publish("OrderFailed", { orderId, reason, materials })
+    EP-->>BC: event published
+    OP->>SA: evaluateStockLevels()
+    SA->>IR: checkThreshold(FILLER)
+    IR-->>SA: current=0, threshold=10
+    SA->>EP: publish("LowStockAlert", { material: "FILLER", current: 0, threshold: 10 })
+    BC-->>OP: job completed (no retry)
 
-    rect rgb(255, 243, 224)
-        Note over S,EP: FASE 3: Reintento Automático (BullMQ)
-        Note over BC: BullMQ reintenta con backoff exponencial<br/>Intento 1: 2s<br/>Intento 2: 4s<br/>Intento 3: 8s
-        BC->>OP: retry(job, attempt=2)
-        OP->>OS: isAlreadyProcessed(orderId)
-        Note right of OS: La orden ya está en FAILED<br/>No se reprocesa
-        OP-->>BC: skip - order already in terminal state
-        BC->>OP: retry(job, attempt=3)
-        OP-->>BC: skip - order already in terminal state
-        Note over BC: Después de 3 reintentos → Dead Letter Queue
-        BC->>EP: publish("JobMovedToDLQ", { jobId, orderId })
-    end
+    Note over S,EP: FASE 3: Reintento Automático (BullMQ)
+    Note over BC: BullMQ reintenta con backoff exponencial<br/>Intento 1: 2s<br/>Intento 2: 4s<br/>Intento 3: 8s
+    BC->>OP: retry(job, attempt=2)
+    OP->>OS: isAlreadyProcessed(orderId)
+    Note right of OS: La orden ya está en FAILED<br/>No se reprocesa
+    OP-->>BC: skip - order already in terminal state
+    BC->>OP: retry(job, attempt=3)
+    OP-->>BC: skip - order already in terminal state
+    Note over BC: Después de 3 reintentos → Dead Letter Queue
+    BC->>EP: publish("JobMovedToDLQ", { jobId, orderId })
 ```
 
 ---

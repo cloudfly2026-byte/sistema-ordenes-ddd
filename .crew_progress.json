@@ -1,6 +1,6 @@
 {
   "created_at": "2026-06-21T00:17:08.573209+00:00",
-  "updated_at": "2026-06-21T03:09:08.190464+00:00",
+  "updated_at": "2026-06-21T03:10:37.718563+00:00",
   "tasks": {
     "product_analysis": {
       "status": "completed",
@@ -45,22 +45,23 @@
       "output_file": "frontend/src/App.vue"
     },
     "legacy": {
-      "status": "running",
+      "status": "completed",
       "started_at": "2026-06-21T03:09:08.190444+00:00",
-      "completed_at": null,
-      "error": null
+      "completed_at": "2026-06-21T03:10:21.761732+00:00",
+      "error": null,
+      "output_file": "legacy/materiales-bajo-stock.php"
     },
     "testing": {
       "status": "completed",
-      "started_at": "2026-06-21T03:05:56.569067+00:00",
-      "completed_at": "2026-06-21T03:06:02.827312+00:00",
+      "started_at": "2026-06-21T03:10:21.768133+00:00",
+      "completed_at": "2026-06-21T03:10:29.640954+00:00",
       "error": null,
       "output_file": "docs/test-plan.md"
     },
     "devops": {
       "status": "completed",
-      "started_at": "2026-06-21T03:06:02.831805+00:00",
-      "completed_at": "2026-06-21T03:06:09.450096+00:00",
+      "started_at": "2026-06-21T03:10:29.651973+00:00",
+      "completed_at": "2026-06-21T03:10:37.718545+00:00",
       "error": null,
       "output_file": "docker/docker-compose.yml"
     }
