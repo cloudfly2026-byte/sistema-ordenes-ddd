@@ -1,15 +1,13 @@
-FROM node:20-alpine AS builder
+﻿FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 COPY . .
 RUN npx tsc
-
 FROM node:20-alpine AS runner
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --production
+RUN npm install --production
 COPY --from=builder /app/dist ./dist
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
-
