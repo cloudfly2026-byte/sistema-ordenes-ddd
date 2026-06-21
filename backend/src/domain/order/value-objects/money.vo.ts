@@ -13,6 +13,10 @@ export class Money {
     this._currency = currency.toUpperCase();
   }
 
+  static zero(currency = 'USD'): Money {
+    return new Money(0, currency);
+  }
+
   get amount(): number {
     return this._amount;
   }

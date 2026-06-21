@@ -33,7 +33,7 @@ async function bootstrap(): Promise<void> {
   app.useGlobalFilters(new GlobalExceptionFilter(logger));
 
   // Global logging interceptor
-  app.useGlobalInterceptors(new LoggingInterceptor(logger));
+  app.useGlobalInterceptors(new LoggingInterceptor());
 
   // Swagger configuration
   const swaggerConfig = new DocumentBuilder()
