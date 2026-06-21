@@ -496,28 +496,6 @@ flowchart TB
 
     EV3 -.->|"Evaluar stock post-reserva"| F
     F -->|"Stock < umbral"| EV8
-
-    style A fill:#e3f2fd,stroke:#1565c0,color:#000
-    style B fill:#e8eaf6,stroke:#283593,color:#000
-    style C fill:#e8eaf6,stroke:#283593,color:#000
-    style D fill:#fff3e0,stroke:#e65100,color:#000
-    style E fill:#e8f5e9,stroke:#2e7d32,color:#000
-    style F fill:#e8f5e9,stroke:#2e7d32,color:#000
-    style G fill:#fff9c4,stroke:#f57f17,color:#000
-    style H fill:#e8f5e9,stroke:#2e7d32,color:#000
-    style I fill:#e8f5e9,stroke:#2e7d32,color:#000
-    style J fill:#e8f5e9,stroke:#2e7d32,color:#000
-    style EV1 fill:#f3e5f5,stroke:#6a1b9a,color:#fff
-    style EV2 fill:#f3e5f5,stroke:#6a1b9a,color:#fff
-    style EV3 fill:#f3e5f5,stroke:#6a1b9a,color:#fff
-    style EV4 fill:#f3e5f5,stroke:#6a1b9a,color:#fff
-    style EV5 fill:#f3e5f5,stroke:#6a1b9a,color:#fff
-    style EV6 fill:#f3e5f5,stroke:#6a1b9a,color:#fff
-    style EV7 fill:#ffebee,stroke:#c62828,color:#fff
-    style EV8 fill:#ffebee,stroke:#c62828,color:#fff
-    style K fill:#e0f2f1,stroke:#004d40,color:#000
-    style K2 fill:#e0f2f1,stroke:#004d40,color:#000
-    style K3 fill:#e0f2f1,stroke:#004d40,color:#000
 ```
 
 ### Catálogo de Eventos de Dominio
