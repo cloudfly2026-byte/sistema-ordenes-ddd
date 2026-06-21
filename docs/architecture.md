@@ -40,26 +40,36 @@ El sistema sigue una **arquitectura hexagonal (Ports & Adapters)** con patrones 
 El diagrama de contexto muestra el sistema desde una perspectiva de alto nivel, identificando los actores externos y los sistemas con los que interactúa. Este nivel responde a la pregunta: **¿Qué hace el sistema y quién lo usa?**
 
 ```mermaid
-C4Context
-    title Diagrama de Contexto - Sistema de Gestión de Empaque e Inventario
+flowchart TD
+    title["Diagrama de Contexto - Sistema de Gestión de Empaque e Inventario"]
 
-    Person(shopify, "Shopify Platform", "Plataforma de e-commerce que envía webhooks de órdenes creadas")
-    Person(warehouse, "Warehouse Operator", "Operador de almacén que utiliza el dashboard para monitorear órdenes e inventario")
-    Person(admin, "Admin User", "Administrador del sistema que configura umbrales y supervisa operaciones")
+    shopify["👤 Shopify Platform<br/>Plataforma de e-commerce que envía<br/>webhooks de órdenes creadas"]
+    warehouse["👤 Warehouse Operator<br/>Operador de almacén que utiliza<br/>el dashboard para monitorear<br/>órdenes e inventario"]
+    admin["👤 Admin User<br/>Administrador del sistema que<br/>configura umbrales y<br/>supervisa operaciones"]
 
-    System(system, "Sistema de Gestión de Empaque e Inventario", "Procesa webhooks de Shopify, calcula materiales de empaque, gestiona inventario de materiales y expone dashboard de monitoreo")
+    system["🏭 Sistema de Gestión de<br/>Empaque e Inventario<br/>Procesa webhooks de Shopify,<br/>calcula materiales de empaque,<br/>gestiona inventario de materiales<br/>y expone dashboard de monitoreo"]
 
-    System_Ext(postgreSQL, "PostgreSQL", "Base de datos transaccional que almacena órdenes, inventario y auditoría")
-    System_Ext(redis, "Redis", "Caché en memoria y broker de mensajes para BullMQ")
-    System_Ext(legacyPHP, "Legacy PHP", "Sistema legacy que consulta estado de bajo stock")
+    subgraph external["Sistemas Externos"]
+        postgreSQL["🗄️ PostgreSQL<br/>Base de datos transaccional<br/>que almacena órdenes,<br/>inventario y auditoría"]
+        redis["⚡ Redis<br/>Caché en memoria y<br/>broker de mensajes<br/>para BullMQ"]
+        legacyPHP["📦 Legacy PHP<br/>Sistema legacy que<br/>consulta estado de<br/>bajo stock"]
+    end
 
-    Rel(shopify, system, "Envía webhooks (orders/create)", "HTTPS/JSON")
-    Rel(warehouse, system, "Consulta dashboard y monitoreo", "HTTPS/JSON")
-    Rel(admin, system, "Configura parámetros del sistema", "HTTPS/JSON")
-    Rel(system, postgreSQL, "Lee y escribe datos transaccionales", "TCP/SSL")
-    Rel(system, redis, "Publica eventos y gestiona colas", "TCP")
-    Rel(legacyPHP, postgreSQL, "Consulta niveles de stock bajo", "TCP")
-    Rel(legacyPHP, system, "Endpoint de bajo stock", "HTTPS/JSON")
+    shopify -->|"Envía webhooks<br/>(orders/create)<br/>HTTPS/JSON"| system
+    warehouse -->|"Consulta dashboard<br/>y monitoreo<br/>HTTPS/JSON"| system
+    admin -->|"Configura parámetros<br/>del sistema<br/>HTTPS/JSON"| system
+    system -->|"Lee y escribe datos<br/>transaccionales<br/>TCP/SSL"| postgreSQL
+    system -->|"Publica eventos<br/>y gestiona colas<br/>TCP"| redis
+    legacyPHP -->|"Consulta niveles<br/>de stock bajo<br/>TCP"| postgreSQL
+    legacyPHP -->|"Endpoint de<br/>bajo stock<br/>HTTPS/JSON"| system
+
+    style shopify fill:none,stroke:#1565c0
+    style warehouse fill:none,stroke:#1565c0
+    style admin fill:none,stroke:#1565c0
+    style system fill:none,stroke:#c62828
+    style postgreSQL fill:none,stroke:#2e7d32
+    style redis fill:none,stroke:#e65100
+    style legacyPHP fill:none,stroke:#6a1b9a
 ```
 
 ### Actores y Sistemas
@@ -71,6 +81,7 @@ C4Context
 | **Admin User** | Usuario administrativo | Configura umbrales de stock, supervisa métricas del sistema |
 | **PostgreSQL** | Persistencia | Almacena órdenes, inventario, reservas y auditoría |
 | **Redis** | Caché y Broker | Almacena caché de consultas frecuentes y gestiona colas BullMQ |
+| **BullMQ** | Cola de trabajos | Procesa órdenes encoladas de forma asíncrona |
 | **Legacy PHP** | Sistema heredado | Expone endpoint de consulta de bajo stock para integraciones existentes |
 
 ---
@@ -82,40 +93,43 @@ C4Context
 El diagrama de contenedores descompone el sistema en unidades desplegables, mostrando las tecnologías utilizadas, los protocolos de comunicación y las responsabilidades de cada contenedor.
 
 ```mermaid
-C4Container
-    title Diagrama de Contenedores - Sistema de Gestión de Empaque e Inventario
+flowchart LR
+    title["Diagrama de Contenedores - Sistema de Gestión de Empaque e Inventario"]
 
-    Container_Boundary(backend, "Backend NestJS") {
-        Container(api, "API Backend", "NestJS + TypeScript", "Recibe webhooks, expone API REST del dashboard, publica eventos de dominio")
-        Container(worker, "Worker (BullMQ Consumer)", "NestJS + TypeScript", "Procesa órdenes encolados: cálculo de materiales, reserva y consumo de inventario")
-    }
+    subgraph backend["Backend NestJS"]
+        api["API Backend<br/>NestJS + TypeScript<br/>Recibe webhooks, expone API REST<br/>del dashboard, publica eventos"]
+        worker["Worker (BullMQ Consumer)<br/>NestJS + TypeScript<br/>Procesa órdenes encolados:<br/>cálculo de materiales, reserva<br/>y consumo de inventario"]
+    end
 
-    Container_Boundary(frontend, "Frontend") {
-        Container(spa, "Frontend SPA", "Vue 3 + Pinia + Vite", "Dashboard interactivo para monitoreo de órdenes, inventario y alertas")
-    }
+    subgraph frontend["Frontend"]
+        spa["Frontend SPA<br/>Vue 3 + Pinia + Vite<br/>Dashboard interactivo para<br/>monitoreo de órdenes,<br/>inventario y alertas"]
+    end
 
-    Container_Boundary(infrastructure, "Infraestructura") {
-        Container(db, "PostgreSQL", "PostgreSQL v14+", "Almacenamiento transaccional de órdenes, inventario, reservas y auditoría")
-        Container(redis, "Redis", "Redis v7+", "Caché de consultas, pub/sub para eventos, backend de BullMQ")
-        Container(queue, "BullMQ", "BullMQ + Redis", "Cola de trabajos para procesamiento asíncrono de órdenes")
-    }
+    subgraph infrastructure["Infraestructura"]
+        db["PostgreSQL<br/>PostgreSQL v14+<br/>Almacenamiento transaccional<br/>de órdenes, inventario,<br/>reservas y auditoría"]
+        redis["Redis<br/>Redis v7+<br/>Caché de consultas,<br/>pub/sub para eventos,<br/>backend de BullMQ"]
+        queue["BullMQ<br/>BullMQ + Redis<br/>Cola de trabajos para<br/>procesamiento asíncrono<br/>de órdenes"]
+    end
 
-    Container_Boundary(legacy, "Legacy") {
-        Container(php, "Legacy PHP", "PHP v8.1+", "Endpoint de consulta de bajo stock para integraciones existentes")
-    }
+    subgraph legacy["Legacy"]
+        php["Legacy PHP<br/>PHP v8.1+<br/>Endpoint de consulta de<br/>bajo stock para integraciones<br/>existentes"]
+    end
 
-    Rel(shopify, api, "Envía webhooks orders/create", "HTTPS/JSON (HMAC)")
-    Rel(api, queue, "Encola trabajos de procesamiento", "BullMQ/Redis Protocol")
-    Rel(api, db, "Guarda eventos de webhook", "TCP/PgBouncer")
-    Rel(api, redis, "Cachea consultas frecuentes", "TCP/Redis Protocol")
-    Rel(worker, queue, "Consume trabajos de la cola", "BullMQ/Redis Protocol")
-    Rel(worker, db, "Lee y escribe órdenes e inventario", "TCP/PgBouncer")
-    Rel(worker, redis, "Publica eventos de dominio", "Redis Pub/Sub")
-    Rel(worker, api, "Notifica cambios de estado", "Redis Pub/Sub")
-    Rel(spa, api, "Consulta órdenes, inventario, métricas", "HTTPS/JSON (REST API)")
-    Rel(spa, api, "Recibe actualizaciones en tiempo real", "WebSocket/SSE")
-    Rel(php, db, "Consulta niveles de stock", "TCP/PDO")
-    Rel(admin, spa, "Configura umbrales y parámetros", "HTTPS/JSON")
+    shopify["Shopify Platform"]
+    admin["Admin User"]
+
+    shopify -->|"Envía webhooks orders/create<br/>HTTPS/JSON (HMAC)"| api
+    api -->|"Encola trabajos<br/>BullMQ/Redis"| queue
+    api -->|"Guarda eventos<br/>TCP/PgBouncer"| db
+    api -->|"Cachea consultas<br/>TCP/Redis"| redis
+    worker -->|"Consume trabajos<br/>BullMQ/Redis"| queue
+    worker -->|"Lee y escribe órdenes<br/>TCP/PgBouncer"| db
+    worker -->|"Publica eventos<br/>Redis Pub/Sub"| redis
+    worker -->|"Notifica cambios<br/>Redis Pub/Sub"| api
+    spa -->|"Consulta datos<br/>HTTPS/JSON (REST)"| api
+    spa -->|"Actualizaciones<br/>WebSocket/SSE"| api
+    php -->|"Consulta stock<br/>TCP/PDO"| db
+    admin -->|"Configura parámetros<br/>HTTPS/JSON"| spa
 ```
 
 ### Detalle de Contenedores
@@ -139,88 +153,88 @@ C4Container
 El diagrama de componentes descompone el API Backend y el Worker en sus componentes internos, mostrando la organización en capas (Adapters, Application, Domain, Infrastructure) siguiendo Clean Architecture y Hexagonal Architecture.
 
 ```mermaid
-C4Component
-    title Diagrama de Componentes - Backend NestJS
+flowchart TB
+    title["Diagrama de Componentes - Backend NestJS"]
 
-    Container_Boundary(apiBackend, "API Backend") {
+    shopify["Shopify Platform"]
 
-        Component_Boundary(adaptersIn, "Inbound Adapters") {
-            Component(webhookCtrl, "WebhookController", "NestJS Controller", "Recibe webhooks de Shopify, valida HMAC, responde 200 OK")
-            Component(restApiCtrl, "DashboardController", "NestJS Controller", "Expone endpoints REST para consultas del dashboard")
-            Component(sseCtrl, "SSEController", "NestJS Controller", "Envía eventos en tiempo real al frontend via Server-Sent Events")
-        }
+    subgraph apiBackend["API Backend"]
+        subgraph adaptersIn["Inbound Adapters"]
+            webhookCtrl["WebhookController<br/>NestJS Controller<br/>Recibe webhooks, valida HMAC"]
+            restApiCtrl["DashboardController<br/>NestJS Controller<br/>Expone endpoints REST"]
+            sseCtrl["SSEController<br/>NestJS Controller<br/>Envía eventos en tiempo real"]
+        end
 
-        Component_Boundary(appLayer, "Application Layer") {
-            Component(webhookAppSvc, "WebhookApplicationService", "NestJS Service", "Orquesta recepción, validación y encolamiento de webhooks")
-            Component(dashboardAppSvc, "DashboardApplicationService", "NestJS Service", "Coordina consultas de órdenes, inventario y métricas")
-            Component(eventPublisher, "DomainEventPublisher", "NestJS Service", "Publica eventos de dominio via Redis Pub/Sub")
-        }
+        subgraph appLayer["Application Layer"]
+            webhookAppSvc["WebhookApplicationService<br/>Orquesta recepción y encolamiento"]
+            dashboardAppSvc["DashboardApplicationService<br/>Coordina consultas"]
+            eventPublisher["DomainEventPublisher<br/>Publica eventos via Redis Pub/Sub"]
+        end
 
-        Component_Boundary(domainLayer, "Domain Layer") {
-            Component(webhookValidator, "WebhookHmacValidator", "Domain Service", "Valida firma HMAC de webhooks de Shopify")
-            Component(idempotencySvc, "IdempotencyService", "Domain Service", "Verifica duplicidad de eventos por shopify_order_id")
-        }
+        subgraph domainLayer["Domain Layer"]
+            webhookValidator["WebhookHmacValidator<br/>Valida firma HMAC"]
+            idempotencySvc["IdempotencyService<br/>Verifica duplicidad"]
+        end
 
-        Component_Boundary(infraLayer, "Infrastructure Layer") {
-            Component(bullProducer, "BullMQProducer", "Infrastructure Service", "Encola trabajos en BullMQ con configuración de reintentos")
-            Component(redisCache, "RedisCacheService", "Infrastructure Service", "Gestiona caché de consultas con TTL configurable")
-            Component(webhookRepo, "WebhookEventRepository", "Repository", "Persiste eventos de webhook en PostgreSQL")
-            Component(orderRepo, "OrderRepository", "Repository", "Gestiona CRUD de órdenes en PostgreSQL")
-        }
-    }
+        subgraph infraLayer["Infrastructure Layer"]
+            bullProducer["BullMQProducer<br/>Encola trabajos"]
+            redisCache["RedisCacheService<br/>Gestiona caché"]
+            webhookRepo["WebhookEventRepository<br/>Persiste eventos"]
+            orderRepo["OrderRepository<br/>CRUD de órdenes"]
+        end
+    end
 
-    Container_Boundary(workerBackend, "Worker") {
+    subgraph workerBackend["Worker"]
+        subgraph adaptersInW["Inbound Adapters"]
+            bullConsumer["BullMQConsumer<br/>Consume trabajos de la cola"]
+        end
 
-        Component_Boundary(adaptersInW, "Inbound Adapters") {
-            Component(bullConsumer, "BullMQConsumer", "NestJS Processor", "Consume trabajos de la cola order-processing")
-        }
+        subgraph appLayerW["Application Layer"]
+            orderProcessor["OrderProcessorService<br/>Orquesta procesamiento de órdenes"]
+            inventoryAppSvc["InventoryApplicationService<br/>Coordina inventario"]
+        end
 
-        Component_Boundary(appLayerW, "Application Layer") {
-            Component(orderProcessor, "OrderProcessorService", "NestJS Service", "Orquesta el flujo completo de procesamiento de órdenes")
-            Component(inventoryAppSvc, "InventoryApplicationService", "NestJS Service", "Coordina verificación, reserva y consumo de inventario")
-        }
+        subgraph domainLayerW["Domain Layer"]
+            materialCalc["MaterialCalculatorService<br/>Calcula materiales"]
+            inventorySvc["InventoryDomainService<br/>Lógica de stock"]
+            orderMachine["OrderStateMachine<br/>Máquina de estados"]
+            stockAlertSvc["StockAlertService<br/>Evalúa umbrales"]
+        end
 
-        Component_Boundary(domainLayerW, "Domain Layer") {
-            Component(materialCalc, "MaterialCalculatorService", "Domain Service", "Calcula tipo de caja y materiales según reglas de negocio")
-            Component(inventorySvc, "InventoryDomainService", "Domain Service", "Gestiona lógica de stock: reserva, consumo, validación")
-            Component(orderMachine, "OrderStateMachine", "Domain Service", "Máquina de estados para transiciones válidas de órdenes")
-            Component(stockAlertSvc, "StockAlertService", "Domain Service", "Evalúa umbrales y genera alertas de bajo stock")
-        }
+        subgraph infraLayerW["Infrastructure Layer"]
+            inventoryRepo["InventoryRepository<br/>Materiales con FOR UPDATE"]
+            reservationRepo["ReservationRepository<br/>Reservas por orden"]
+            auditRepo["AuditLogRepository<br/>Registra auditoría"]
+            eventStore["EventStore<br/>Event sourcing parcial"]
+        end
+    end
 
-        Component_Boundary(infraLayerW, "Infrastructure Layer") {
-            Component(inventoryRepo, "InventoryRepository", "Repository", "Gestiona materiales de empaque con SELECT FOR UPDATE")
-            Component(reservationRepo, "ReservationRepository", "Repository", "Gestiona reservas de inventario por orden")
-            Component(auditRepo, "AuditLogRepository", "Repository", "Registra todas las acciones para auditoría")
-            Component(eventStore, "EventStore", "Infrastructure Service", "Almacena eventos de dominio para event sourcing parcial")
-        }
-    }
+    shopify -->|"POST /webhooks/shopify"| webhookCtrl
+    webhookCtrl --> webhookAppSvc
+    webhookAppSvc --> webhookValidator
+    webhookAppSvc --> idempotencySvc
+    webhookAppSvc --> bullProducer
+    webhookAppSvc --> webhookRepo
+    webhookAppSvc --> eventPublisher
 
-    Rel(shopify, webhookCtrl, "POST /webhooks/shopify", "HTTPS/JSON")
-    Rel(webhookCtrl, webhookAppSvc, "Procesa webhook", "Method call")
-    Rel(webhookAppSvc, webhookValidator, "Valida HMAC", "Method call")
-    Rel(webhookAppSvc, idempotencySvc, "Verifica duplicidad", "Method call")
-    Rel(webhookAppSvc, bullProducer, "Encola trabajo", "BullMQ")
-    Rel(webhookAppSvc, webhookRepo, "Guarda evento", "Repository")
-    Rel(webhookAppSvc, eventPublisher, "Publica OrderReceived", "Redis Pub/Sub")
+    restApiCtrl --> dashboardAppSvc
+    dashboardAppSvc --> orderRepo
+    dashboardAppSvc --> inventoryRepo
+    dashboardAppSvc --> redisCache
 
-    Rel(restApiCtrl, dashboardAppSvc, "Consulta datos", "Method call")
-    Rel(dashboardAppSvc, orderRepo, "Lee órdenes", "Repository")
-    Rel(dashboardAppSvc, inventoryRepo, "Lee inventario", "Repository")
-    Rel(dashboardAppSvc, redisCache, "Consulta caché", "Redis")
+    sseCtrl --> eventPublisher
 
-    Rel(sseCtrl, eventPublisher, "Se suscribe a eventos", "Redis Pub/Sub")
-
-    Rel(bullConsumer, orderProcessor, "Procesa trabajo", "Method call")
-    Rel(orderProcessor, materialSvc, "Calcula materiales", "Method call")
-    Rel(orderProcessor, inventoryAppSvc, "Gestiona inventario", "Method call")
-    Rel(orderProcessor, orderMachine, "Actualiza estado", "Method call")
-    Rel(orderProcessor, eventPublisher, "Publica eventos", "Redis Pub/Sub")
-    Rel(materialCalc, inventorySvc, "Verifica materiales", "Method call")
-    Rel(inventoryAppSvc, inventoryRepo, "Lee/actualiza stock", "Repository (FOR UPDATE)")
-    Rel(inventoryAppSvc, reservationRepo, "Gestiona reservas", "Repository")
-    Rel(inventoryAppSvc, stockAlertSvc, "Evalúa alertas", "Method call")
-    Rel(orderProcessor, auditRepo, "Registra auditoría", "Repository")
-    Rel(orderProcessor, eventStore, "Guarda evento", "Repository")
+    bullConsumer --> orderProcessor
+    orderProcessor --> materialCalc
+    orderProcessor --> inventoryAppSvc
+    orderProcessor --> orderMachine
+    orderProcessor --> eventPublisher
+    materialCalc --> inventorySvc
+    inventoryAppSvc --> inventoryRepo
+    inventoryAppSvc --> reservationRepo
+    inventoryAppSvc --> stockAlertSvc
+    orderProcessor --> auditRepo
+    orderProcessor --> eventStore
 ```
 
 ### Descripción de Componentes del Dominio
