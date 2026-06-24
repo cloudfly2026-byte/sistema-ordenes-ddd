@@ -419,6 +419,8 @@ curl http://localhost:8081/low-stock
 - **[Arquitectura](docs/architecture.md)** — Diagramas C4, ADRs, bounded contexts, ERD, flujos de eventos
 - **[Plan de Pruebas](docs/test-plan.md)** — Estrategia de testing, escenarios críticos
 - **[Diagramas de Secuencia](docs/sequence-diagrams-reconectado.md)** — Flujos principales y alternativos
+- **[Archivos por Historia de Usuario](docs/archivos-por-historia-usuario.md)** — Mapeo de archivos del proyecto por cada historia de usuario
+- **[Validacion de Historias de Usuario](docs/validacion-historias-de-usuario.md)** — Checklist de cumplimiento y estado de cada historia de usuario
 - **[Swagger API](http://localhost:3000/api/docs)** — Documentación interactiva de la API (requiere Docker)
 
 ---
