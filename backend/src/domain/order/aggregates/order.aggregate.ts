@@ -15,7 +15,7 @@ export class OrderAggregate {
     const order = Order.create({
       shopifyOrderId: props.shopifyOrderId,
       customerEmail: props.customerEmail ?? null,
-      totalPrice: Money.zero(),
+      totalPrice: new Money(props.totalPrice ?? 0),
       items: props.items,
       hasFragileItems: props.hasFragileItems,
       idempotencyKey: null,

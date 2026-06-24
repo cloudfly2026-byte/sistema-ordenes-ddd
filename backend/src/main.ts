@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './shared/filters/global-exception.filter';
 import { LoggingInterceptor } from './presentation/interceptors/logging.interceptor';
 import { StructuredLogger } from './shared/logger/structured-logger.service';
+import * as express from 'express';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {
@@ -13,6 +14,13 @@ async function bootstrap(): Promise<void> {
 
   const logger = app.get(StructuredLogger);
   app.useLogger(logger);
+
+  // Capture raw body for HMAC validation using express.json verify callback
+  app.use(express.json({
+    verify: (req: any, res, buf) => {
+      req.rawBody = buf.toString();
+    },
+  }));
 
   // Global prefix
   app.setGlobalPrefix('api/v1');

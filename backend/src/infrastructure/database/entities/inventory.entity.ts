@@ -1,23 +1,31 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, OneToOne, JoinColumn, Unique } from 'typeorm';
+import { MaterialEntity } from './material.entity';
 
 @Entity('inventory')
-export class Inventory {
+@Unique(['materialId'])
+export class InventoryEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'material_id' })
+  @Column({ name: 'material_id', type: 'uuid' })
   materialId: string;
 
-  @Column({ type: 'int', default: 0 })
-  quantity: number;
+  @OneToOne('MaterialEntity', (material: MaterialEntity) => material.inventory)
+  @JoinColumn({ name: 'material_id' })
+  material?: MaterialEntity;
 
-  @Column({ type: 'int', default: 0 })
-  reserved: number;
+  @Column({ name: 'quantity_available', type: 'int', default: 0 })
+  quantityAvailable: number;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  @Column({ name: 'quantity_reserved', type: 'int', default: 0 })
+  quantityReserved: number;
 
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt: Date;
+  @Column({ name: 'minimum_stock', type: 'int', default: 10 })
+  minimumStock: number;
+
+  @Column({ name: 'last_updated_at', type: 'timestamptz', default: () => 'now()' })
+  lastUpdatedAt: Date;
+
+  @Column({ type: 'int', default: 1 })
+  version: number;
 }
-

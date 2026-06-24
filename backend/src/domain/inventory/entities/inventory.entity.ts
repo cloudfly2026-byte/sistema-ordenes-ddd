@@ -4,6 +4,10 @@ export class Inventory {
     public readonly materialId: string,
     public currentStock: number,
     public reservedStock: number,
+    public readonly version: number = 1,
+    public readonly minimumStock: number = 10,
+    public readonly materialCode: string | null = null,
+    public readonly materialName: string | null = null,
   ) {}
 
   get availableStock(): number {
@@ -30,4 +34,3 @@ export class Inventory {
     this.reservedStock = Math.max(0, this.reservedStock - quantity);
   }
 }
-

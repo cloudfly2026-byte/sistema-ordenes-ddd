@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BoxType } from '../value-objects/box-type.vo';
+import { BoxSelectionPolicy } from '../policies/box-selection.policy';
 
 export interface PackagingRequirement {
   boxType: BoxType;
@@ -10,15 +11,10 @@ export interface PackagingRequirement {
 
 @Injectable()
 export class PackagingCalculatorDomainService {
+  constructor(private readonly boxSelectionPolicy: BoxSelectionPolicy) {}
+
   calculate(totalProducts: number, hasFragileItems: boolean): PackagingRequirement {
-    let boxType: BoxType;
-    if (totalProducts <= 2) {
-      boxType = BoxType.SMALL;
-    } else if (totalProducts <= 5) {
-      boxType = BoxType.MEDIUM;
-    } else {
-      boxType = BoxType.LARGE;
-    }
+    const boxType = this.boxSelectionPolicy.selectBoxType(totalProducts);
 
     return {
       boxType,

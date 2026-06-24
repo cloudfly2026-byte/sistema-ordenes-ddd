@@ -10,7 +10,7 @@ export const useInventoryStore = defineStore('inventory', () => {
   const error = ref<string | null>(null)
 
   const lowStockMaterials = computed(() =>
-    materials.value.filter(m => m.currentStock < m.lowStockThreshold)
+    materials.value.filter(m => m.currentStock <= m.lowStockThreshold)
   )
 
   const totalMaterials = computed(() => materials.value.length)

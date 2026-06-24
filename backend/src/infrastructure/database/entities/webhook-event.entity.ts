@@ -5,31 +5,30 @@ export class WebhookEvent {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'shopify_order_id' })
-  shopifyOrderId: string;
+  @Column({ name: 'shopify_event_id', unique: true })
+  shopifyEventId: string;
 
-  @Column({ name: 'webhook_topic', length: 50 })
-  webhookTopic: string;
+  @Column({ length: 128 })
+  topic: string;
 
-  @Column({ name: 'hmac_signature', length: 500 })
-  hmacSignature: string;
+  @Column({ name: 'shop_domain', length: 256 })
+  shopDomain: string;
 
   @Column({ type: 'jsonb' })
   payload: Record<string, unknown>;
 
-  @Column({ name: 'processing_status', length: 20, default: 'PENDING' })
-  processingStatus: string;
+  @Column({ name: 'status', type: 'enum', enum: ['PENDING', 'PROCESSED', 'FAILED', 'DUPLICATE'], default: 'PENDING' })
+  status: string;
 
-  @Column({ name: 'error_message', nullable: true })
-  errorMessage: string | null;
+  @Column({ type: 'int', default: 0 })
+  attempts: number;
 
-  @Column({ name: 'retry_count', type: 'int', default: 0 })
-  retryCount: number;
+  @Column({ name: 'last_error', type: 'text', nullable: true })
+  lastError: string | null;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
+  @CreateDateColumn({ name: 'received_at' })
+  receivedAt: Date;
 
-  @Column({ name: 'processed_at', nullable: true })
+  @Column({ name: 'processed_at', type: 'timestamptz', nullable: true })
   processedAt: Date | null;
 }
-

@@ -4,39 +4,38 @@
  *
  * GET /low-stock
  * Retorna JSON con materiales por debajo del umbral configurado
+ *
+ * Formato de respuesta:
+ * [{"material": "BOX_SMALL", "stock": 5}, ...]
  */
 
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
+
+// Restrict CORS to a configured origin instead of '*'; this endpoint exposes
+// internal stock levels and should not be callable from arbitrary origins.
+$allowedOrigin = getenv('CORS_ALLOWED_ORIGIN') ?: 'http://localhost:8080';
+header('Access-Control-Allow-Origin: ' . $allowedOrigin);
+header('Vary: Origin');
 
 require_once __DIR__ . '/config.php';
 
 try {
-    $pdo = getConnection();
+    $pdo = getDbConnection();
 
     $stmt = $pdo->query("
         SELECT
-            m.id,
-            m.sku,
-            m.name,
-            m.type,
-            m.current_stock AS stock,
-            m.low_stock_threshold AS threshold,
-            (m.current_stock - m.reserved_stock) AS available_stock
+            m.code AS material,
+            i.quantity_available AS stock
         FROM materials m
-        WHERE m.is_active = true
-          AND m.current_stock < m.low_stock_threshold
-        ORDER BY (m.current_stock::float / NULLIF(m.low_stock_threshold, 0)) ASC
+        JOIN inventory i ON i.material_id = m.id
+        WHERE i.quantity_available <= i.minimum_stock
+        ORDER BY i.quantity_available ASC
     ");
 
     $materials = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    echo json_encode([
-        'success' => true,
-        'count' => count($materials),
-        'data' => $materials,
-        'generated_at' => date('c')
-    ], JSON_PRETTY_PRINT);
+    // Formato exacto: array plano de objetos { material, stock }
+    echo json_encode($materials, JSON_PRETTY_PRINT);
 
 } catch (PDOException $e) {
     http_response_code(500);
@@ -51,4 +50,3 @@ try {
         'error' => $e->getMessage()
     ]);
 }
-

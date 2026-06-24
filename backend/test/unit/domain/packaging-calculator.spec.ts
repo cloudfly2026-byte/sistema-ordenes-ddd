@@ -1,11 +1,12 @@
 import { PackagingCalculatorDomainService } from '../../../src/domain/order/services/packaging-calculator.domain-service';
+import { BoxSelectionPolicy } from '../../../src/domain/order/policies/box-selection.policy';
 import { BoxType } from '../../../src/domain/order/value-objects/box-type.vo';
 
 describe('PackagingCalculatorDomainService', () => {
   let service: PackagingCalculatorDomainService;
 
   beforeEach(() => {
-    service = new PackagingCalculatorDomainService();
+    service = new PackagingCalculatorDomainService(new BoxSelectionPolicy());
   });
 
   describe('calculate', () => {

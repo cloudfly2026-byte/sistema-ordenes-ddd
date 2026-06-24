@@ -15,13 +15,21 @@ export class ShopifyHmacGuard implements CanActivate {
       throw new UnauthorizedException('Missing HMAC signature');
     }
 
-    const rawBody = JSON.stringify(request.body);
+    // Use raw body if available (set by express.json verify), otherwise stringify
+    const rawBody = request.rawBody ?? JSON.stringify(request.body);
     const computedHmac = crypto
       .createHmac('sha256', secret)
       .update(rawBody, 'utf8')
       .digest('base64');
+    const hmacBuffer = Buffer.from(hmac, 'utf8');
+    const computedBuffer = Buffer.from(computedHmac, 'utf8');
 
-    if (crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(computedHmac))) {
+    if (hmacBuffer.length !== computedBuffer.length) {
+      this.logger.warn('Invalid HMAC signature (length mismatch)');
+      throw new UnauthorizedException('Invalid HMAC signature');
+    }
+
+    if (crypto.timingSafeEqual(hmacBuffer, computedBuffer)) {
       return true;
     }
 
@@ -29,4 +37,3 @@ export class ShopifyHmacGuard implements CanActivate {
     throw new UnauthorizedException('Invalid HMAC signature');
   }
 }
-

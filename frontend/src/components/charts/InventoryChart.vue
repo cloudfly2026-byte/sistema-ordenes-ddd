@@ -10,7 +10,7 @@ const chartData = computed(() => {
   return sorted.slice(0, 8).map(m => ({
     label: m.name.length > 15 ? m.name.substring(0, 15) + '...' : m.name,
     value: m.currentStock,
-    color: m.currentStock < m.lowStockThreshold ? '#c62828' : '#1565c0',
+    color: m.currentStock <= m.lowStockThreshold ? '#c62828' : '#1565c0',
   }))
 })
 

@@ -19,3 +19,10 @@ export class InvalidInventoryOperationException extends Error {
   }
 }
 
+export class InventoryConcurrencyConflictException extends Error {
+  constructor(materialId: string) {
+    super(`Concurrent modification detected for inventory of material ${materialId}; version mismatch on update`);
+    this.name = 'InventoryConcurrencyConflictException';
+  }
+}
+

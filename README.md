@@ -1,38 +1,164 @@
-# 🛒 Sistema de Gestión de Empaque e Inventario para Shopify
+# 🛒 Reto Técnico: Gestión de Órdenes Shopify e Inventario de Material de Empaque
 
-> Sistema automatizado de procesamiento de órdenes Shopify que calcula materiales de empaque, gestiona inventario de forma transaccional y expone un dashboard de monitoreo en tiempo real.
+> Sistema completo (Frontend y Backend) para gestionar el procesamiento de órdenes, el control de inventario de material de empaque y la trazabilidad operativa de los pedidos.
 
 ## 📋 Tabla de Contenidos
 
 - [Descripción](#-descripción)
+- [Requerimientos Técnicos](#-requerimientos-técnicos)
+- [Historias de Usuario](#-historias-de-usuario)
 - [Arquitectura](#-arquitectura)
 - [Stack Tecnológico](#-stack-tecnológico)
 - [Estructura del Proyecto](#-estructura-del-proyecto)
 - [Inicio Rápido](#-inicio-rápido)
-- [Desarrollo](#-desarrollo)
 - [API](#-api)
 - [Documentación](#-documentación)
-- [Contribución](#-contribución)
 
 ---
 
 ## 📝 Descripción
 
-El sistema se integra con la plataforma Shopify mediante webhooks para automatizar el proceso de preparación de pedidos (picking y packing). Cada orden recibida es procesada para:
+Una empresa de comercio electrónico opera múltiples tiendas en Shopify y requiere desarrollar una solución completa (Frontend y Backend) para gestionar el procesamiento de órdenes, el control de inventario de material de empaque y la trazabilidad operativa de los pedidos.
 
-1. **Calcular los materiales de empaque** necesarios según reglas de negocio (tipo de caja, etiquetas, cinta, relleno)
-2. **Reservar inventario** de forma transaccional, evitando sobreventa
-3. **Consumir inventario** una vez completado el empaque
-4. **Monitorear** el estado de órdenes e inventario en tiempo real
-5. **Alertar** cuando el stock cae por debajo de umbrales críticos
+La solución debe garantizar **escalabilidad, mantenibilidad, rendimiento, consistencia de inventario** y capacidad de soportar altos volúmenes transaccionales.
 
-### Valor de Negocio
+### Funcionalidades Principales
 
-- **Reducción de Errores:** Automatización del cálculo de materiales
-- **Optimización de Costos:** Uso eficiente de materiales de empaque
-- **Mejora en la Experiencia del Cliente:** Envíos mejor protegidos
-- **Visibilidad Operativa:** Dashboard en tiempo real
-- **Escalabilidad:** Manejo de volumen creciente de órdenes
+1. **Recepción de Órdenes:** Captura automática de órdenes vía webhooks de Shopify (`orders/create`).
+2. **Procesamiento Masivo:** Procesamiento desacoplado de órdenes para soportar picos de alta demanda.
+3. **Cálculo de Materiales:** Determinación automática de materiales de empaque según reglas de negocio.
+4. **Control de Inventario:** Descuento atómico de inventario con prevención de inconsistencias.
+5. **Panel Operativo:** Dashboard para consultar órdenes, inventario y materiales consumidos.
+6. **Compatibilidad Legacy:** Componente PHP para consulta de materiales con bajo inventario.
+
+---
+
+## ⚙️ Requerimientos Técnicos
+
+### Backend
+
+| Requerimiento | Tecnología |
+|---|---|
+| **Framework** | NestJS |
+| **Lenguaje** | TypeScript |
+| **Base de Datos** | PostgreSQL |
+| **Caché** | Redis |
+| **Arquitectura** | Domain Driven Design (DDD), principios SOLID, arquitectura modular |
+| **Procesamiento Asíncrono** | Mecanismo desacoplado para el procesamiento de órdenes |
+| **Integración** | Recepción de Webhooks Shopify |
+| **Compatibilidad Legacy** | Componente en PHP |
+| **Pruebas** | Unitarias y de integración |
+| **Documentación** | Swagger / OpenAPI |
+
+### Frontend
+
+| Requerimiento | Tecnología |
+|---|---|
+| **Framework** | Vue.js (2 o 3) o Svelte |
+| **Interfaz gráfica** | Polaris Web Components o diseño inspirado en Shopify Admin |
+| **Manejo de estado** | Pinia, Vuex o equivalente |
+| **Pruebas** | Jest, Vitest o Testing Library |
+| **UX** | Estados de carga, error, filtros y actualización automática |
+
+---
+
+## 📖 Historias de Usuario
+
+### HU1 — Recepción de Órdenes desde Shopify
+
+> Como sistema, quiero recibir órdenes provenientes de Shopify para iniciar su procesamiento sin afectar el tiempo de respuesta del webhook.
+
+**Criterios de Aceptación:**
+- Implementar un endpoint para recibir órdenes desde Shopify.
+- Registrar el evento recibido.
+- Evitar el procesamiento duplicado de una misma orden.
+- Garantizar que la lógica de negocio no se ejecute directamente desde el webhook.
+
+### HU2 — Procesamiento Masivo de Órdenes
+
+> Como sistema, quiero procesar órdenes de forma desacoplada para soportar picos de alta demanda sin afectar la estabilidad de la plataforma.
+
+**Criterios de Aceptación:**
+- Implementar un mecanismo que desacople la recepción de órdenes de su procesamiento.
+- Implementar un componente encargado exclusivamente del procesamiento de órdenes.
+- Procesar al menos 100 órdenes simuladas.
+- Registrar el estado de cada orden.
+- Permitir reintentos ante errores temporales.
+- Mantener trazabilidad por identificador de orden.
+
+### HU3 — Cálculo de Material de Empaque
+
+> Como sistema, quiero calcular automáticamente los materiales de empaque requeridos para cada orden con el fin de descontarlos correctamente del inventario.
+
+**Criterios de Aceptación:**
+- Implementar las reglas de negocio dentro del dominio de la aplicación.
+- Toda orden debe consumir una etiqueta y una unidad de cinta.
+- Si la orden contiene productos frágiles debe consumir material de protección adicional.
+- Registrar qué materiales fueron utilizados en cada orden.
+
+**Reglas de Negocio:**
+
+| Condición | Material |
+|---|---|
+| Hasta 2 productos | Caja pequeña |
+| Entre 3 y 5 productos | Caja mediana |
+| Más de 5 productos | Caja grande |
+| Toda orden | Etiqueta |
+| Toda orden | Cinta |
+| Si contiene productos frágiles | Material de protección |
+
+**Inventario Inicial:**
+
+| Código | Material | Stock |
+|---|---|---|
+| `BOX_SMALL` | Caja pequeña | 100 |
+| `BOX_MEDIUM` | Caja mediana | 80 |
+| `BOX_LARGE` | Caja grande | 50 |
+| `LABEL` | Etiqueta | 500 |
+| `TAPE` | Cinta | 200 |
+| `FILLER` | Material de protección | 120 |
+
+### HU4 — Sincronización y Control de Inventario
+
+> Como sistema, quiero mantener un inventario consistente para evitar descuadres y problemas de disponibilidad de materiales.
+
+**Criterios de Aceptación:**
+- Descontar inventario.
+- Si no existe inventario suficiente, la orden debe marcarse como **FALLIDA**.
+- No debe existir descuento parcial de inventario.
+- Evitar inconsistencias cuando múltiples órdenes consumen los mismos materiales simultáneamente.
+
+### HU5 — Panel Operativo y Compatibilidad Legacy
+
+> Como usuario operativo, quiero consultar las órdenes procesadas, el estado del inventario y los materiales consumidos desde una única interfaz administrativa.
+
+**Criterios de Aceptación:**
+- Desarrollar una interfaz en Vue.js o Svelte.
+- Mostrar indicadores generales de operación.
+- Mostrar listado de órdenes procesadas.
+- Mostrar inventario actual de materiales.
+- Permitir filtrar órdenes por estado.
+- Mostrar detalle de materiales utilizados por cada orden.
+- Manejar estados de carga y error.
+
+**Compatibilidad Legacy:**
+
+Implementar un componente PHP para consultar materiales con bajo inventario:
+
+```
+legacy/materiales-bajo-stock.php
+```
+
+Respuesta esperada:
+
+```json
+[
+  {
+    "material": "BOX_SMALL",
+    "stock": 5
+  }
+]
+```
 
 ---
 
@@ -40,24 +166,45 @@ El sistema se integra con la plataforma Shopify mediante webhooks para automatiz
 
 El sistema sigue una **arquitectura hexagonal (Ports & Adapters)** con patrones **Domain-Driven Design (DDD)** y **Event-Driven Architecture (EDA)**.
 
+### Flujo de Procesamiento
+
+```
+┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐     ┌──────────────┐
+│   Shopify   │────▶│  WebhookController│────▶│SyncShopifyOrder │────▶│  PostgreSQL  │
+│   Webhook   │     │  (HMAC + Idemp.) │     │    UseCase      │     │  (orders)    │
+└─────────────┘     └──────────────────┘     └────────┬────────┘     └──────────────┘
+                                                       │
+                                                       ▼
+                                              ┌─────────────────┐
+                                              │OrderQueueProducer│
+                                              │   (BullMQ)      │
+                                              └────────┬────────┘
+                                                       │
+                                                       ▼
+                                              ┌─────────────────┐     ┌──────────────────┐
+                                              │OrderQueueConsumer│────▶│ ProcessOrder     │
+                                              │   (BullMQ)       │     │    UseCase       │
+                                              └──────────────────┘     └────────┬─────────┘
+                                                                              │
+                                                                              ▼
+                                                                    ┌─────────────────┐
+                                                                    │  Domain: Order  │
+                                                                    │  (aggregates,   │
+                                                                    │   services,     │
+                                                                    │   events)       │
+                                                                    └─────────────────┘
+```
+
 ### Bounded Contexts
 
 | Contexto | Responsabilidad |
 |---|---|
-| **Shopify Integration** | Recepción y validación de webhooks |
-| **Orders** | Ciclo de vida de órdenes y estados |
-| **Inventory** | Gestión de stock, reservas y consumo |
-| **Packaging** | Cálculo de materiales según reglas de negocio |
+| **Shopify Integration** | Recepción y validación de webhooks, idempotencia |
+| **Orders** | Ciclo de vida de órdenes y estados (PENDING → PROCESSING → COMPLETED/FAILED) |
+| **Inventory** | Gestión de stock, reservas y consumo con control de concurrencia |
+| **Packaging** | Cálculo de materiales según reglas de negocio (dominio rico) |
 | **Legacy Integration** | Endpoint PHP para consultas de bajo stock |
 | **Monitoring** | Dashboard, métricas y alertas |
-
-### Principios Arquitectónicos
-
-- **Separación de responsabilidades:** Cada bounded context tiene su propia lógica
-- **Inversión de dependencias:** Los puertos definen interfaces que los adaptadores implementan
-- **Event-Driven:** Los eventos de dominio desacoplan la lógica entre contextos
-- **CQRS ligero:** Separación de comandos (escrita) y consultas (lectura)
-- **Resiliencia por diseño:** Reintentos con backoff exponencial, circuit breakers y dead letter queues
 
 ---
 
@@ -73,8 +220,7 @@ El sistema sigue una **arquitectura hexagonal (Ports & Adapters)** con patrones 
 | **Legacy** | PHP 8.2 + Apache |
 | **Infraestructura** | Docker Compose |
 | **ORM** | TypeORM |
-| **Validación** | class-validator / class-transformer |
-| **Documentación API** | Swagger/OpenAPI |
+| **Documentación API** | Swagger / OpenAPI |
 
 ---
 
@@ -84,36 +230,28 @@ El sistema sigue una **arquitectura hexagonal (Ports & Adapters)** con patrones 
 project-root/
 ├── docs/                           # Documentación del proyecto
 │   ├── architecture.md             # Diagramas C4, ADRs, flujos
-│   └── product-analysis.md         # Análisis de producto y requerimientos
+│   ├── product-analysis.md         # Análisis de producto y requerimientos
+│   ├── test-plan.md                # Plan de pruebas
+│   └── sequence-diagrams-reconectado.md  # Diagramas de secuencia
 ├── backend/                        # API NestJS
 │   ├── src/
 │   │   ├── domain/                 # Lógica de dominio (DDD)
 │   │   │   ├── order/              # Agregado Order
-│   │   │   │   ├── entities/       # Entidades (Order, OrderItem)
-│   │   │   │   ├── value-objects/  # VOs (OrderStatus, BoxType, Money)
-│   │   │   │   ├── events/         # Eventos de dominio
-│   │   │   │   ├── services/       # Servicios de dominio
-│   │   │   │   ├── repositories/   # Interfaces de repositorios
-│   │   │   │   ├── policies/       # Políticas de negocio
-│   │   │   │   ├── aggregates/     # Agregados
-│   │   │   │   └── exceptions/     # Excepciones de dominio
 │   │   │   └── inventory/          # Agregado Inventory
 │   │   ├── application/            # Casos de uso y puertos
-│   │   │   ├── use-cases/          # Casos de uso
-│   │   │   └── ports/              # Interfaces de puertos
+│   │   │   └── use-cases/          # SyncShopifyOrder, ProcessOrder, etc.
 │   │   ├── infrastructure/         # Adaptadores de infraestructura
-│   │   │   ├── database/           # TypeORM entities y repositorios
+│   │   │   ├── database/           # TypeORM entities, repositorios, mappers
 │   │   │   ├── queue/              # BullMQ productores y consumidores
-│   │   │   ├── cache/              # Redis cache service
-│   │   │   └── circuit-breaker/    # Circuit breaker service
+│   │   │   └── cache/              # Redis cache service
 │   │   ├── presentation/           # Capa de presentación
 │   │   │   ├── controllers/        # Controladores REST
 │   │   │   ├── guards/             # Guards (HMAC)
-│   │   │   ├── interceptors/       # Interceptores (logging, idempotencia)
+│   │   │   ├── interceptors/       # Interceptores (idempotencia)
 │   │   │   └── dto/                # DTOs de request/response
 │   │   └── shared/                 # Utilidades compartidas
-│   ├── test/                       # Tests unitarios y de integración
-│   ├── Dockerfile                  # Imagen Docker del backend
+│   ├── test/                       # Tests unitarios, integración y e2e
+│   ├── Dockerfile
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── nest-cli.json
@@ -132,7 +270,6 @@ project-root/
 ├── legacy/                         # Endpoint PHP legacy
 │   ├── materiales-bajo-stock.php   # Endpoint de bajo stock
 │   ├── config.php                  # Configuración
-│   ├── health.php                  # Health check
 │   └── Dockerfile
 ├── docker/                         # Configuración Docker
 │   ├── docker-compose.yml          # Orquestación de servicios
@@ -155,8 +292,8 @@ project-root/
 
 ```bash
 # Clonar el repositorio
-git clone https://github.com/cloudfly2026-byte/sistema-ordenes-ddd.git
-cd sistema-ordenes-ddd
+git clone <repo-url>
+cd project-root
 
 # Configurar variables de entorno
 cp .env.example .env
@@ -192,79 +329,33 @@ npm run dev
 
 ---
 
-## 💻 Desarrollo
-
-### Comandos del Backend
-
-```bash
-cd backend
-
-# Instalar dependencias
-npm install
-
-# Desarrollo con hot-reload
-npm run start:dev
-
-# Compilar TypeScript
-npm run build
-
-# Verificar tipos sin compilar
-npm run typecheck
-
-# Ejecutar tests
-npm run test
-
-# Tests con cobertura
-npm run test:cov
-
-# Linter
-npm run lint
-```
-
-### Comandos de Docker
-
-```bash
-# Levantar todos los servicios
-docker-compose -f docker/docker-compose.yml up -d
-
-# Ver logs de un servicio
-docker-compose -f docker/docker-compose.yml logs -f api
-
-# Detener todos los servicios
-docker-compose -f docker/docker-compose.yml down
-
-# Reconstruir y levantar
-docker-compose -f docker/docker-compose.yml up -d --build
-
-# Estado de los contenedores
-docker-compose -f docker/docker-compose.yml ps
-```
-
----
-
 ## 📡 API
 
 ### Endpoints Principales
 
 #### Webhooks
+
 | Método | Endpoint | Descripción |
 |---|---|---|
 | `POST` | `/api/v1/webhooks/shopify` | Recepción de webhooks de Shopify |
 
 #### Órdenes
+
 | Método | Endpoint | Descripción |
 |---|---|---|
 | `GET` | `/api/v1/orders` | Listar órdenes (paginado) |
 | `GET` | `/api/v1/orders/:id` | Obtener orden por ID |
+| `POST` | `/api/v1/orders/:id/process` | Procesar orden manualmente |
 
 #### Inventario
+
 | Método | Endpoint | Descripción |
 |---|---|---|
 | `GET` | `/api/v1/inventory` | Estado del inventario |
 | `GET` | `/api/v1/inventory/low-stock` | Alertas de bajo stock |
-| `GET` | `/api/v1/inventory/:materialId` | Stock de un material |
 
 #### Legacy
+
 | Método | Endpoint | Descripción |
 |---|---|---|
 | `GET` | `/low-stock` | Consulta de bajo stock (PHP) |
@@ -293,37 +384,13 @@ curl http://localhost:8081/low-stock
 
 ## 📚 Documentación
 
-- **[Análisis de Producto](docs/product-analysis.md)** - Requerimientos funcionales y no funcionales, reglas de negocio, casos límite
-- **[Arquitectura](docs/architecture.md)** - Diagramas C4, ADRs, bounded contexts, ERD, flujos de eventos
-- **[Swagger API](http://localhost:3000/api/docs)** - Documentación interactiva de la API (requiere Docker)
-
-### Reglas de Negocio Principales
-
-| Regla | Descripción |
-|---|---|
-| **RF-004** | Cálculo de caja: 1-2 productos → SMALL, 3-5 → MEDIUM, 6+ → LARGE |
-| **RF-005** | Materiales obligatorios: 1 LABEL + 1 TAPE por orden |
-| **RF-006** | Si hay productos frágiles → +1 FILLER |
-| **RF-010** | Si no hay stock suficiente → orden FAILED, sin descuentos parciales |
-| **RF-011** | Estados: PROCESSING → COMPLETED / FAILED |
+- **[Análisis de Producto](docs/product-analysis.md)** — Historias de usuario, reglas de negocio, casos límite
+- **[Arquitectura](docs/architecture.md)** — Diagramas C4, ADRs, bounded contexts, ERD, flujos de eventos
+- **[Plan de Pruebas](docs/test-plan.md)** — Estrategia de testing, escenarios críticos
+- **[Diagramas de Secuencia](docs/sequence-diagrams-reconectado.md)** — Flujos principales y alternativos
+- **[Swagger API](http://localhost:3000/api/docs)** — Documentación interactiva de la API (requiere Docker)
 
 ---
 
-## 🤝 Contribución
-
-1. Crear una rama feature: `git checkout -b feature/nueva-funcionalidad`
-2. Hacer commits con mensajes descriptivos
-3. Crear un Pull Request con la descripción de los cambios
-
----
-
-## 📄 Licencia
-
-Este proyecto fue generado automáticamente con CrewAI.
-
----
-
-**Documento generado por:** OWL - Senior Software Architect & Tech Lead
-**Versión:** 1.0
-**Fecha:** 2026-06-20
-
+**Versión:** 3.0
+**Fecha:** 2025-07-15

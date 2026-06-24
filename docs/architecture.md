@@ -1,4 +1,4 @@
-# Arquitectura del Sistema de Gestión de Empaque e Inventario para Shopify
+# Arquitectura del Sistema — Gestión de Órdenes Shopify e Inventario de Material de Empaque
 
 ## Tabla de Contenidos
 
@@ -6,8 +6,8 @@
 2. [Diagrama de Contexto (C4 Level 1)](#2-diagrama-de-contexto-c4-level-1)
 3. [Diagrama de Contenedores (C4 Level 2)](#3-diagrama-de-contenedores-c4-level-2)
 4. [Diagrama de Componentes (C4 Level 3)](#4-diagrama-de-componentes-c4-level-3)
-5. [Diagrama de Secuencia - Flujo Principal](#5-diagrama-de-secuencia---flujo-principal)
-6. [Diagrama de Secuencia - Flujo de Fallo de Inventario](#6-diagrama-de-secuencia---flujo-de-fallo-de-inventario)
+5. [Diagrama de Secuencia — Flujo Principal](#5-diagrama-de-secuencia--flujo-principal)
+6. [Diagramas de Secuencia — Flujos Alternativos](#6-diagramas-de-secuencia--flujos-alternativos)
 7. [Diagrama de Flujo de Eventos](#7-diagrama-de-flujo-de-eventos)
 8. [Diagrama Entidad-Relación (ERD)](#8-diagrama-entidad-relación-erd)
 9. [Architecture Decision Records (ADRs)](#9-architecture-decision-records-adrs)
@@ -30,6 +30,7 @@ El sistema sigue una **arquitectura hexagonal (Ports & Adapters)** con patrones 
 - **Event-Driven:** Los eventos de dominio desacoplan la lógica entre contextos.
 - **CQRS ligero:** Separación de comandos (escrita) y consultas (lectura) donde aplica.
 - **Resiliencia por diseño:** Reintentos con backoff exponencial, circuit breakers y dead letter queues.
+- **SOLID:** Principios de responsabilidad única, abierto/cerrado, sustitución de Liskov, segregación de interfaces e inversión de dependencias.
 
 ---
 
@@ -37,39 +38,30 @@ El sistema sigue una **arquitectura hexagonal (Ports & Adapters)** con patrones 
 
 ### Descripción
 
-El diagrama de contexto muestra el sistema desde una perspectiva de alto nivel, identificando los actores externos y los sistemas con los que interactúa. Este nivel responde a la pregunta: **¿Qué hace el sistema y quién lo usa?**
+El diagrama de contexto muestra el sistema desde una perspectiva de alto nivel, identificando los actores externos y los sistemas con los que interactúa.
 
 ```mermaid
 flowchart TD
-    title["Diagrama de Contexto - Sistema de Gestión de Empaque e Inventario"]
+    title["Diagrama de Contexto — Gestión de Órdenes Shopify"]
 
     shopify["👤 Shopify Platform<br/>Plataforma de e-commerce que envía<br/>webhooks de órdenes creadas"]
     warehouse["👤 Warehouse Operator<br/>Operador de almacén que utiliza<br/>el dashboard para monitorear<br/>órdenes e inventario"]
-    admin["👤 Admin User<br/>Administrador del sistema que<br/>configura umbrales y<br/>supervisa operaciones"]
+    admin["👤 Admin User<br/>Administrador del sistema que<br/>configura parámetros y<br/>supervisa operaciones"]
 
-    system["🏭 Sistema de Gestión de<br/>Empaque e Inventario<br/>Procesa webhooks de Shopify,<br/>calcula materiales de empaque,<br/>gestiona inventario de materiales<br/>y expone dashboard de monitoreo"]
+    system["🏭 Sistema de Gestión de<br/>Órdenes e Inventario<br/>Procesa webhooks de Shopify,<br/>calcula materiales de empaque,<br/>gestiona inventario de materiales<br/>y expone panel operativo"]
 
     subgraph external["Sistemas Externos"]
         postgreSQL["🗄️ PostgreSQL<br/>Base de datos transaccional<br/>que almacena órdenes,<br/>inventario y auditoría"]
         redis["⚡ Redis<br/>Caché en memoria y<br/>broker de mensajes<br/>para BullMQ"]
-        legacyPHP["📦 Legacy PHP<br/>Sistema legacy que<br/>consulta estado de<br/>bajo stock"]
+        legacyPHP["📦 Legacy PHP<br/>Componente legacy que<br/>consulta materiales con<br/>bajo inventario"]
     end
 
     shopify -->|"Envía webhooks<br/>(orders/create)<br/>HTTPS/JSON"| system
-    warehouse -->|"Consulta dashboard<br/>y monitoreo<br/>HTTPS/JSON"| system
-    admin -->|"Configura parámetros<br/>del sistema<br/>HTTPS/JSON"| system
+    warehouse -->|"Consulta panel operativo<br/>HTTPS/JSON"| system
+    admin -->|"Configura parámetros<br/>HTTPS/JSON"| system
     system -->|"Lee y escribe datos<br/>transaccionales<br/>TCP/SSL"| postgreSQL
     system -->|"Publica eventos<br/>y gestiona colas<br/>TCP"| redis
     legacyPHP -->|"Consulta niveles<br/>de stock bajo<br/>TCP"| postgreSQL
-    legacyPHP -->|"Endpoint de<br/>bajo stock<br/>HTTPS/JSON"| system
-
-    style shopify fill:none,stroke:#1565c0
-    style warehouse fill:none,stroke:#1565c0
-    style admin fill:none,stroke:#1565c0
-    style system fill:none,stroke:#c62828
-    style postgreSQL fill:none,stroke:#2e7d32
-    style redis fill:none,stroke:#e65100
-    style legacyPHP fill:none,stroke:#6a1b9a
 ```
 
 ### Actores y Sistemas
@@ -78,11 +70,10 @@ flowchart TD
 |---|---|---|
 | **Shopify Platform** | Fuente de eventos | Envía webhooks `orders/create` al sistema |
 | **Warehouse Operator** | Usuario operativo | Utiliza el dashboard para ver órdenes, inventario y alertas |
-| **Admin User** | Usuario administrativo | Configura umbrales de stock, supervisa métricas del sistema |
+| **Admin User** | Usuario administrativo | Configura parámetros del sistema |
 | **PostgreSQL** | Persistencia | Almacena órdenes, inventario, reservas y auditoría |
 | **Redis** | Caché y Broker | Almacena caché de consultas frecuentes y gestiona colas BullMQ |
-| **BullMQ** | Cola de trabajos | Procesa órdenes encoladas de forma asíncrona |
-| **Legacy PHP** | Sistema heredado | Expone endpoint de consulta de bajo stock para integraciones existentes |
+| **Legacy PHP** | Componente heredado | Expone endpoint de consulta de bajo stock |
 
 ---
 
@@ -94,7 +85,7 @@ El diagrama de contenedores descompone el sistema en unidades desplegables, most
 
 ```mermaid
 flowchart LR
-    title["Diagrama de Contenedores - Sistema de Gestión de Empaque e Inventario"]
+    title["Diagrama de Contenedores — Gestión de Órdenes Shopify"]
 
     subgraph backend["Backend NestJS"]
         api["API Backend<br/>NestJS + TypeScript<br/>Recibe webhooks, expone API REST<br/>del dashboard, publica eventos"]
@@ -102,17 +93,17 @@ flowchart LR
     end
 
     subgraph frontend["Frontend"]
-        spa["Frontend SPA<br/>Vue 3 + Pinia + Vite<br/>Dashboard interactivo para<br/>monitoreo de órdenes,<br/>inventario y alertas"]
+        spa["Frontend SPA<br/>Vue 3 + Pinia + Vite<br/>Panel operativo para<br/>monitoreo de órdenes,<br/>inventario y alertas"]
     end
 
     subgraph infrastructure["Infraestructura"]
-        db["PostgreSQL<br/>PostgreSQL v14+<br/>Almacenamiento transaccional<br/>de órdenes, inventario,<br/>reservas y auditoría"]
-        redis["Redis<br/>Redis v7+<br/>Caché de consultas,<br/>pub/sub para eventos,<br/>backend de BullMQ"]
-        queue["BullMQ<br/>BullMQ + Redis<br/>Cola de trabajos para<br/>procesamiento asíncrono<br/>de órdenes"]
+        db["PostgreSQL<br/>Almacenamiento transaccional<br/>de órdenes, inventario,<br/>reservas y auditoría"]
+        redis["Redis<br/>Caché de consultas,<br/>pub/sub para eventos,<br/>backend de BullMQ"]
+        queue["BullMQ<br/>Cola de trabajos para<br/>procesamiento asíncrono<br/>de órdenes"]
     end
 
     subgraph legacy["Legacy"]
-        php["Legacy PHP<br/>PHP v8.1+<br/>Endpoint de consulta de<br/>bajo stock para integraciones<br/>existentes"]
+        php["Legacy PHP<br/>PHP 8.2+<br/>Endpoint de consulta de<br/>bajo stock para integraciones<br/>existentes"]
     end
 
     shopify["Shopify Platform"]
@@ -120,14 +111,12 @@ flowchart LR
 
     shopify -->|"Envía webhooks orders/create<br/>HTTPS/JSON (HMAC)"| api
     api -->|"Encola trabajos<br/>BullMQ/Redis"| queue
-    api -->|"Guarda eventos<br/>TCP/PgBouncer"| db
+    api -->|"Guarda eventos<br/>TCP"| db
     api -->|"Cachea consultas<br/>TCP/Redis"| redis
     worker -->|"Consume trabajos<br/>BullMQ/Redis"| queue
-    worker -->|"Lee y escribe órdenes<br/>TCP/PgBouncer"| db
+    worker -->|"Lee y escribe órdenes<br/>TCP"| db
     worker -->|"Publica eventos<br/>Redis Pub/Sub"| redis
-    worker -->|"Notifica cambios<br/>Redis Pub/Sub"| api
     spa -->|"Consulta datos<br/>HTTPS/JSON (REST)"| api
-    spa -->|"Actualizaciones<br/>WebSocket/SSE"| api
     php -->|"Consulta stock<br/>TCP/PDO"| db
     admin -->|"Configura parámetros<br/>HTTPS/JSON"| spa
 ```
@@ -138,11 +127,11 @@ flowchart LR
 |---|---|---|
 | **API Backend** | NestJS + TypeScript | Recepción de webhooks con validación HMAC, exposición de API REST para el dashboard, publicación de eventos en BullMQ |
 | **Worker** | NestJS + TypeScript | Consumo de trabajos BullMQ, cálculo de materiales, gestión transaccional de inventario, actualización de estados |
-| **Frontend SPA** | Vue 3 + Pinia + Vite | Dashboard interactivo con visualización de órdenes, inventario, alertas y métricas en tiempo real |
-| **PostgreSQL** | PostgreSQL v14+ | Persistencia transaccional con soporte ACID para órdenes, inventario, reservas y auditoría |
-| **Redis** | Redis v7+ | Caché de consultas frecuentes, pub/sub para eventos en tiempo real, backend de BullMQ |
+| **Frontend SPA** | Vue 3 + Pinia + Vite | Panel operativo con visualización de órdenes, inventario, alertas y métricas |
+| **PostgreSQL** | PostgreSQL 16 | Persistencia transaccional con soporte ACID para órdenes, inventario, reservas y auditoría |
+| **Redis** | Redis 7 | Caché de consultas frecuentes, pub/sub para eventos en tiempo real, backend de BullMQ |
 | **BullMQ** | BullMQ + Redis | Cola de trabajos con reintentos, backoff exponencial y dead letter queue |
-| **Legacy PHP** | PHP v8.1+ | Endpoint HTTP para consulta de materiales con bajo stock |
+| **Legacy PHP** | PHP 8.2+ | Endpoint HTTP para consulta de materiales con bajo stock |
 
 ---
 
@@ -150,262 +139,246 @@ flowchart LR
 
 ### Descripción
 
-El diagrama de componentes descompone el API Backend y el Worker en sus componentes internos, mostrando la organización en capas (Adapters, Application, Domain, Infrastructure) siguiendo Clean Architecture y Hexagonal Architecture.
+El diagrama de componentes descompone el backend en sus capas: **Presentation** (controllers, guards, interceptors), **Application** (use-cases), **Domain** (entidades, agregados, servicios de dominio, interfaces de repositorio) e **Infrastructure** (TypeORM, BullMQ, Redis), siguiendo Domain-Driven Design con arquitectura hexagonal (Ports & Adapters).
 
 ```mermaid
 flowchart TB
-    title["Diagrama de Componentes - Backend NestJS"]
+    title["Diagrama de Componentes — Backend NestJS"]
 
     shopify["Shopify Platform"]
 
-    subgraph apiBackend["API Backend"]
-        subgraph adaptersIn["Inbound Adapters"]
-            webhookCtrl["WebhookController<br/>NestJS Controller<br/>Recibe webhooks, valida HMAC"]
-            restApiCtrl["DashboardController<br/>NestJS Controller<br/>Expone endpoints REST"]
-            sseCtrl["SSEController<br/>NestJS Controller<br/>Envía eventos en tiempo real"]
-        end
-
-        subgraph appLayer["Application Layer"]
-            webhookAppSvc["WebhookApplicationService<br/>Orquesta recepción y encolamiento"]
-            dashboardAppSvc["DashboardApplicationService<br/>Coordina consultas"]
-            eventPublisher["DomainEventPublisher<br/>Publica eventos via Redis Pub/Sub"]
-        end
-
-        subgraph domainLayer["Domain Layer"]
-            webhookValidator["WebhookHmacValidator<br/>Valida firma HMAC"]
-            idempotencySvc["IdempotencyService<br/>Verifica duplicidad"]
-        end
-
-        subgraph infraLayer["Infrastructure Layer"]
-            bullProducer["BullMQProducer<br/>Encola trabajos"]
-            redisCache["RedisCacheService<br/>Gestiona caché"]
-            webhookRepo["WebhookEventRepository<br/>Persiste eventos"]
-            orderRepo["OrderRepository<br/>CRUD de órdenes"]
-        end
+    subgraph presentation["Presentation Layer"]
+        webhookCtrl["WebhookController<br/>POST /webhooks/shopify"]
+        ordersCtrl["OrdersController<br/>GET /orders, POST /orders/:id/process"]
+        inventoryCtrl["InventoryController<br/>GET /inventory"]
+        hmacGuard["ShopifyHmacGuard<br/>Valida HMAC-SHA256"]
+        idempInterceptor["IdempotencyInterceptor"]
     end
 
-    subgraph workerBackend["Worker"]
-        subgraph adaptersInW["Inbound Adapters"]
-            bullConsumer["BullMQConsumer<br/>Consume trabajos de la cola"]
-        end
+    subgraph application["Application Layer (use-cases)"]
+        syncOrderUC["SyncShopifyOrderUseCase<br/>Persiste orden + encola job"]
+        processOrderUC["ProcessOrderUseCase<br/>Orquesta cálculo + reserva"]
+        getInventoryUC["GetInventoryStatusUseCase"]
+    end
 
-        subgraph appLayerW["Application Layer"]
-            orderProcessor["OrderProcessorService<br/>Orquesta procesamiento de órdenes"]
-            inventoryAppSvc["InventoryApplicationService<br/>Coordina inventario"]
-        end
+    subgraph domainOrder["Domain · Order"]
+        orderAgg["Order (agregado)<br/>startProcessing/complete/fail<br/>+ domain events"]
+        packagingCalc["PackagingCalculatorDomainService<br/>Reglas HU3 (caja + materiales)"]
+        iOrderRepo["IOrderRepository (puerto)"]
+    end
 
-        subgraph domainLayerW["Domain Layer"]
-            materialCalc["MaterialCalculatorService<br/>Calcula materiales"]
-            inventorySvc["InventoryDomainService<br/>Lógica de stock"]
-            orderMachine["OrderStateMachine<br/>Máquina de estados"]
-            stockAlertSvc["StockAlertService<br/>Evalúa umbrales"]
-        end
+    subgraph domainInventory["Domain · Inventory"]
+        inventoryEntity["Inventory (entidad)"]
+        inventoryDomainSvc["InventoryDomainService<br/>canReserve / isBelowThreshold"]
+        iInventoryRepo["IInventoryRepository (puerto)"]
+    end
 
-        subgraph infraLayerW["Infrastructure Layer"]
-            inventoryRepo["InventoryRepository<br/>Materiales con FOR UPDATE"]
-            reservationRepo["ReservationRepository<br/>Reservas por orden"]
-            auditRepo["AuditLogRepository<br/>Registra auditoría"]
-            eventStore["EventStore<br/>Event sourcing parcial"]
-        end
+    subgraph infrastructure["Infrastructure Layer"]
+        orderRepoImpl["OrderRepository<br/>implementa IOrderRepository<br/>(TypeORM + mapper)"]
+        inventoryRepoImpl["InventoryRepository<br/>implementa IInventoryRepository<br/>(TypeORM + mapper, SELECT FOR UPDATE)"]
+        webhookEventRepo["WebhookEventRepository<br/>INSERT ... ON CONFLICT DO NOTHING"]
+        queueProducer["OrderQueueProducer<br/>BullMQ add('process-order')"]
+        queueConsumer["OrderQueueConsumer<br/>BullMQ @Processor,<br/>llama a ProcessOrderUseCase"]
+        redisCache["RedisCacheService"]
     end
 
     shopify -->|"POST /webhooks/shopify"| webhookCtrl
-    webhookCtrl --> webhookAppSvc
-    webhookAppSvc --> webhookValidator
-    webhookAppSvc --> idempotencySvc
-    webhookAppSvc --> bullProducer
-    webhookAppSvc --> webhookRepo
-    webhookAppSvc --> eventPublisher
+    webhookCtrl --> hmacGuard
+    webhookCtrl --> syncOrderUC
 
-    restApiCtrl --> dashboardAppSvc
-    dashboardAppSvc --> orderRepo
-    dashboardAppSvc --> inventoryRepo
-    dashboardAppSvc --> redisCache
+    syncOrderUC --> webhookEventRepo
+    syncOrderUC --> orderAgg
+    syncOrderUC --> iOrderRepo
+    syncOrderUC --> queueProducer
 
-    sseCtrl --> eventPublisher
+    iOrderRepo -.->|implementado por| orderRepoImpl
+    iInventoryRepo -.->|implementado por| inventoryRepoImpl
 
-    bullConsumer --> orderProcessor
-    orderProcessor --> materialCalc
-    orderProcessor --> inventoryAppSvc
-    orderProcessor --> orderMachine
-    orderProcessor --> eventPublisher
-    materialCalc --> inventorySvc
-    inventoryAppSvc --> inventoryRepo
-    inventoryAppSvc --> reservationRepo
-    inventoryAppSvc --> stockAlertSvc
-    orderProcessor --> auditRepo
-    orderProcessor --> eventStore
+    queueProducer --> queueConsumer
+    queueConsumer --> processOrderUC
+    processOrderUC --> iOrderRepo
+    processOrderUC --> orderAgg
+    processOrderUC --> packagingCalc
+    processOrderUC --> iInventoryRepo
+    inventoryDomainSvc --> inventoryEntity
+    inventoryRepoImpl --> inventoryDomainSvc
+
+    ordersCtrl --> processOrderUC
+    ordersCtrl --> iOrderRepo
+    inventoryCtrl --> getInventoryUC
+    getInventoryUC --> iInventoryRepo
+
+    idempInterceptor --> webhookCtrl
 ```
 
 ### Descripción de Componentes del Dominio
 
 | Componente | Capa | Responsabilidad |
 |---|---|---|
-| **WebhookHmacValidator** | Domain | Valida la autenticidad de los webhooks usando HMAC-SHA256 con el secreto de Shopify |
-| **IdempotencyService** | Domain | Previene procesamiento duplicado verificando shopify_order_id único |
-| **MaterialCalculatorService** | Domain | Implementa las reglas de negocio RF-004 a RF-008 para calcular caja y materiales |
-| **InventoryDomainService** | Domain | Lógica transaccional de reserva y consumo con bloqueo pesimista |
-| **OrderStateMachine** | Domain | Define y valida transiciones de estado: PROCESSING → COMPLETED/FAILED |
-| **StockAlertService** | Domain | Evalúa niveles contra umbrales configurables y genera alertas |
+| **ShopifyHmacGuard** | Presentation | Valida la autenticidad de los webhooks usando HMAC-SHA256 |
+| **WebhookEventRepository** | Infrastructure | Registra cada evento en `webhook_events` con `UNIQUE(shopify_event_id)` para idempotencia |
+| **PackagingCalculatorDomainService** | Domain | Implementa las reglas de negocio de HU3 (tipo de caja + label/tape/filler) |
+| **InventoryDomainService** | Domain | Reglas puras de inventario (`canReserve`, `calculateAvailable`, `isBelowThreshold`) |
+| **OrderRepository / InventoryRepository** | Infrastructure | Implementaciones contra PostgreSQL vía TypeORM + mapper hacia el agregado de dominio |
+| **Order (agregado)** | Domain | Máquina de estados `PENDING → PROCESSING → COMPLETED/FAILED`, dispara eventos de dominio |
+| **OrderQueueProducer / OrderQueueConsumer** | Infrastructure | Productor/consumidor BullMQ que desacopla la recepción del webhook del procesamiento real |
 
 ---
 
-## 5. Diagrama de Secuencia - Flujo Principal
+## 5. Diagrama de Secuencia — Flujo Principal
 
 ### Descripción
 
-Este diagrama muestra el flujo completo de procesamiento exitoso de una orden desde que Shopify envía el webhook hasta que la orden se marca como COMPLETED.
+Este diagrama muestra el flujo completo de procesamiento exitoso de una orden desde que Shopify envía el webhook hasta que la orden se marca como COMPLETED. Separa visualmente la fase síncrona (responder a Shopify rápido — HU1) de la fase asíncrona en el worker BullMQ (HU2).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant S as Shopify Platform
+    participant Shopify
     participant WC as WebhookController
-    participant WS as WebhookApplicationService
-    participant WV as WebhookHmacValidator
-    participant IS as IdempotencyService
-    participant BP as BullMQProducer
-    participant WE as WebhookEventRepository
-    participant BC as BullMQConsumer
-    participant OP as OrderProcessorService
-    participant MC as MaterialCalculatorService
-    participant IA as InventoryApplicationService
-    participant ID as InventoryDomainService
+    participant Guard as ShopifyHmacGuard
+    participant Sync as SyncShopifyOrderUseCase
+    participant WER as WebhookEventRepository
+    participant OR as OrderRepository
+    participant Prod as OrderQueueProducer
+    participant Q as BullMQ
+    participant Cons as OrderQueueConsumer
+    participant Proc as ProcessOrderUseCase
+    participant Dom as Order (agregado)
+    participant Calc as PackagingCalculatorDomainService
     participant IR as InventoryRepository
-    participant RR as ReservationRepository
-    participant OS as OrderStateMachine
-    participant AL as AuditLogRepository
-    participant EP as DomainEventPublisher
+    participant DB as PostgreSQL
 
-    Note over S,EP: FASE 1: Recepción y Validación del Webhook
-    S->>WC: POST /webhooks/shopify (orders/create)
-    Note right of S: Headers: X-Shopify-Hmac-SHA256
-    WC->>WS: processWebhook(payload, headers)
-    WS->>WV: validateHmac(payload, signature)
-    WV->>WV: HMAC-SHA256(secret, payload)
-    WV-->>WS: valid = true
-    WS->>IS: checkDuplicate(shopifyOrderId)
-    IS->>WE: findByShopifyOrderId(id)
-    WE-->>IS: null (no existe)
-    IS-->>WS: isDuplicate = false
-    WS->>WE: save(webhookEvent)
-    WE-->>WS: event saved
-    WS->>BP: enqueue("order-processing", { orderId, eventId })
-    Note right of BP: BullMQ: retries=3, backoff=exponential
-    BP-->>WS: job enqueued
-    WS-->>WC: 200 OK
-    WC-->>S: HTTP 200 OK
+    rect rgb(235, 245, 255)
+    Note over Shopify,Prod: FASE SÍNCRONA — responder rápido, sin lógica de negocio pesada (HU1)
+    Shopify->>WC: POST /webhooks/shopify<br/>(topic: orders/create)
+    WC->>Guard: validar X-Shopify-Hmac-SHA256
+    Guard-->>WC: firma válida
+    WC->>Sync: execute(payload)
+    Sync->>WER: insert(shopify_event_id, payload)<br/>ON CONFLICT DO NOTHING
+    WER->>DB: INSERT INTO webhook_events
+    DB-->>WER: 1 fila insertada (evento nuevo)
+    WER-->>Sync: no es duplicado
+    Sync->>Dom: Order.create({ shopifyOrderId, items, ... })
+    Dom-->>Sync: order (status=PENDING)
+    Sync->>OR: save(order)
+    OR->>DB: INSERT INTO orders / order_items
+    DB-->>OR: ok
+    Sync->>Prod: enqueue(order.id)
+    Prod->>Q: add('process-order', { orderId },<br/>{ attempts:3, backoff:exponential })
+    Q-->>Prod: job encolado
+    Sync-->>WC: ok
+    WC-->>Shopify: 200 OK
+    end
 
-    Note over S,EP: FASE 2: Procesamiento Asíncrono de la Orden
-    BC->>OP: consume(job)
-    OP->>OS: transition(ORDER_PROCESSING)
-    Note right of OS: Estado: PROCESSING
-    OP->>MC: calculateMaterials(orderItems)
-    MC->>MC: countProducts(items)
-    Note right of MC: 1-2: BOX_SMALL<br/>3-5: BOX_MEDIUM<br/>6+: BOX_LARGE
-    MC->>MC: addMandatoryMaterials()
-    Note right of MC: + LABEL (1)<br/>+ TAPE (1)
-    MC->>MC: checkFragileItems(items)
-    Note right of MC: Si hay frágiles: + FILLER (1)
-    MC-->>OP: materials: [{BOX_SMALL, 1}, {LABEL, 1}, {TAPE, 1}]
-    OP->>IA: reserveInventory(orderId, materials)
-    IA->>ID: checkAndReserve(materials)
-    ID->>IR: selectForUpdate(materialId)
-    Note right of IR: SELECT ... FOR UPDATE<br/>Bloqueo pesimista a nivel de fila
-    IR-->>ID: stock disponible
-    ID->>ID: verifyAllMaterialsAvailable()
-    Note right of ID: Verifica TODOS los materiales<br/>antes de reservar alguno
-    ID->>IR: decrementStock(materialId, qty)
-    ID->>RR: createReservation(orderId, materials)
-    RR-->>ID: reservation created
-    ID-->>IA: reservation successful
-    IA-->>OP: inventory reserved
-    OP->>OS: transition(ORDER_COMPLETED)
-    Note right of OS: Estado: COMPLETED
-    OP->>RR: consumeReservation(orderId)
-    Note right of RR: Consumo definitivo<br/>de la reserva
-    OP->>AL: logAction(orderId, "ORDER_COMPLETED", details)
-    OP->>EP: publish("OrderCompleted", { orderId, materials })
-    EP-->>BC: event published
-    BC-->>OP: job completed
+    rect rgb(235, 255, 235)
+    Note over Q,DB: FASE ASÍNCRONA — desacoplada, corre en el worker (HU2)
+    Q->>Cons: job disponible
+    Cons->>Proc: execute(orderId)
+    Proc->>OR: findById(orderId)
+    OR->>DB: SELECT orders + order_items
+    DB-->>OR: filas
+    OR-->>Proc: order (agregado de dominio)
+    Proc->>Dom: order.startProcessing()
+    Dom-->>Proc: status=PROCESSING
+    Proc->>Calc: calculate(totalProducts, hasFragileItems)
+    Calc-->>Proc: { boxType, label:1, tape:1, filler }
+    Proc->>IR: reserve(orderId, materiales)
+    IR->>DB: SELECT ... FOR UPDATE<br/>(orden determinístico por material_id)
+    DB-->>IR: stock disponible suficiente
+    IR->>DB: UPDATE inventory<br/>(available -=, reserved +=)
+    DB-->>IR: ok
+    IR-->>Proc: reserva exitosa
+    Proc->>Dom: order.complete(boxType)
+    Dom-->>Proc: status=COMPLETED
+    Proc->>OR: update(order)
+    OR->>DB: UPDATE orders SET status='COMPLETED'
+    DB-->>OR: ok
+    Cons-->>Q: job completado (ACK)
+    end
 ```
 
 ---
 
-## 6. Diagrama de Secuencia - Flujo de Fallo de Inventario
+## 6. Diagramas de Secuencia — Flujos Alternativos
 
-### Descripción
+### 6.1 Fallo por Stock Insuficiente (HU4)
 
-Este diagrama muestra el flujo cuando no hay stock suficiente para procesar una orden, demostrando el rollback transaccional que garantiza que no se realicen descuentos parciales.
+Sin descuentos parciales: si **un solo** material no alcanza, no se modifica ningún stock.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant S as Shopify Platform
-    participant WC as WebhookController
-    participant WS as WebhookApplicationService
-    participant BP as BullMQProducer
-    participant BC as BullMQConsumer
-    participant OP as OrderProcessorService
-    participant MC as MaterialCalculatorService
-    participant IA as InventoryApplicationService
-    participant ID as InventoryDomainService
+    participant Q as BullMQ
+    participant Cons as OrderQueueConsumer
+    participant Proc as ProcessOrderUseCase
+    participant Dom as Order (agregado)
+    participant Calc as PackagingCalculatorDomainService
     participant IR as InventoryRepository
-    participant OS as OrderStateMachine
-    participant AL as AuditLogRepository
-    participant EP as DomainEventPublisher
-    participant SA as StockAlertService
+    participant DB as PostgreSQL
+    participant OR as OrderRepository
 
-    Note over S,EP: FASE 1: Recepción del Webhook (igual que flujo principal)
-    S->>WC: POST /webhooks/shopify (orders/create)
-    WC->>WS: processWebhook(payload, headers)
-    WS->>WS: validateHmac() + checkDuplicate()
-    WS->>BP: enqueue("order-processing", data)
-    WS-->>WC: 200 OK
-    WC-->>S: HTTP 200 OK
+    Q->>Cons: job disponible
+    Cons->>Proc: execute(orderId)
+    Proc->>Dom: order.startProcessing()
+    Proc->>Calc: calculate(totalProducts, hasFragileItems)
+    Calc-->>Proc: { boxType:BOX_SMALL, label:1, tape:1, filler:1 }
 
-    Note over S,EP: FASE 2: Procesamiento con Fallo de Inventario
-    BC->>OP: consume(job)
-    OP->>OS: transition(ORDER_PROCESSING)
-    OP->>MC: calculateMaterials(orderItems)
-    MC-->>OP: materials: [{BOX_SMALL, 1}, {LABEL, 1}, {TAPE, 1}, {FILLER, 1}]
-    OP->>IA: reserveInventory(orderId, materials)
-    IA->>ID: checkAndReserve(materials)
-    ID->>IR: beginTransaction()
-    Note right of IR: BEGIN TRANSACTION<br/>ISOLATION: SERIALIZABLE
-    ID->>IR: selectForUpdate(BOX_SMALL)
-    IR-->>ID: stock = 1 ✓
-    ID->>IR: selectForUpdate(LABEL)
-    IR-->>ID: stock = 1 ✓
-    ID->>IR: selectForUpdate(TAPE)
-    IR-->>ID: stock = 1 ✓
-    ID->>IR: selectForUpdate(FILLER)
-    IR-->>ID: stock = 0 ✗ INSUFICIENTE
-    ID->>IR: rollbackTransaction()
-    Note right of IR: ROLLBACK<br/>Ningún stock fue modificado<br/>No hay descuentos parciales
-    ID-->>IA: InsufficientStockException<br/>(FILLER: required=1, available=0)
-    IA-->>OP: reservation failed
-    OP->>OS: transition(ORDER_FAILED)
-    Note right of OS: Estado: FAILED<br/>Motivo: "Stock insuficiente: FILLER"
-    OP->>AL: logAction(orderId, "ORDER_FAILED", { reason: "Stock insuficiente: FILLER" })
-    OP->>EP: publish("OrderFailed", { orderId, reason, materials })
-    EP-->>BC: event published
-    OP->>SA: evaluateStockLevels()
-    SA->>IR: checkThreshold(FILLER)
-    IR-->>SA: current=0, threshold=10
-    SA->>EP: publish("LowStockAlert", { material: "FILLER", current: 0, threshold: 10 })
-    BC-->>OP: job completed (no retry)
+    Proc->>IR: reserve(orderId, materiales)
+    IR->>DB: BEGIN
+    IR->>DB: SELECT ... FOR UPDATE (BOX_SMALL)
+    DB-->>IR: disponible=1 ✓
+    IR->>DB: SELECT ... FOR UPDATE (LABEL)
+    DB-->>IR: disponible=1 ✓
+    IR->>DB: SELECT ... FOR UPDATE (TAPE)
+    DB-->>IR: disponible=1 ✓
+    IR->>DB: SELECT ... FOR UPDATE (FILLER)
+    DB-->>IR: disponible=0 ✗ insuficiente
+    IR->>DB: ROLLBACK
+    Note right of DB: Ningún material fue modificado.<br/>No hay descuento parcial. (HU4)
+    IR-->>Proc: InsufficientStockException
 
-    Note over S,EP: FASE 3: Reintento Automático (BullMQ)
-    Note over BC: BullMQ reintenta con backoff exponencial<br/>Intento 1: 2s<br/>Intento 2: 4s<br/>Intento 3: 8s
-    BC->>OP: retry(job, attempt=2)
-    OP->>OS: isAlreadyProcessed(orderId)
-    Note right of OS: La orden ya está en FAILED<br/>No se reprocesa
-    OP-->>BC: skip - order already in terminal state
-    BC->>OP: retry(job, attempt=3)
-    OP-->>BC: skip - order already in terminal state
-    Note over BC: Después de 3 reintentos → Dead Letter Queue
-    BC->>EP: publish("JobMovedToDLQ", { jobId, orderId })
+    Proc->>Dom: order.fail("Stock insuficiente: FILLER")
+    Dom-->>Proc: status=FAILED
+    Proc->>OR: update(order)
+    OR->>DB: UPDATE orders SET status='FAILED'
+    DB-->>OR: ok
+    Cons-->>Q: job completado (sin reintento:<br/>fallo de negocio, no transitorio)
+```
+
+### 6.2 Webhook Duplicado (Idempotencia — HU1)
+
+Shopify reenvía el mismo evento (`orders/create`) dos veces casi simultáneamente.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Shopify
+    participant WC as WebhookController
+    participant Sync as SyncShopifyOrderUseCase
+    participant WER as WebhookEventRepository
+    participant DB as PostgreSQL
+
+    par Webhook #1
+        Shopify->>WC: POST /webhooks/shopify (event_id: evt_123)
+        WC->>Sync: execute(payload)
+        Sync->>WER: insert(evt_123) ON CONFLICT DO NOTHING
+        WER->>DB: INSERT INTO webhook_events
+        DB-->>WER: 1 fila insertada
+        WER-->>Sync: evento nuevo
+        Sync->>Sync: crear orden + encolar job
+        Sync-->>WC: ok
+        WC-->>Shopify: 200 OK
+    and Webhook #2 (duplicado)
+        Shopify->>WC: POST /webhooks/shopify (event_id: evt_123)
+        WC->>Sync: execute(payload)
+        Sync->>WER: insert(evt_123) ON CONFLICT DO NOTHING
+        WER->>DB: INSERT INTO webhook_events
+        DB-->>WER: 0 filas (ya existía)
+        WER-->>Sync: duplicado detectado
+        Sync-->>WC: ok (sin crear orden)
+        WC-->>Shopify: 200 OK { duplicate: true }
+    end
 ```
 
 ---
@@ -414,7 +387,7 @@ sequenceDiagram
 
 ### Descripción
 
-Este diagrama muestra el flujo completo de eventos de dominio que ocurren durante el ciclo de vida de una orden, incluyendo eventos de éxito y fallo.
+El flujo de eventos muestra cómo el sistema reacciona a cada evento desde la recepción del webhook hasta el resultado final de la orden.
 
 ```mermaid
 flowchart TB
@@ -422,98 +395,42 @@ flowchart TB
         A["Shopify Webhook<br/>(orders/create)"]
     end
 
-    subgraph INGRESS["📥 Capa de Entrada"]
-        B["WebhookController<br/>Valida HMAC"]
-        C["WebhookApplicationService<br/>Verifica Idempotencia"]
+    subgraph INGRESS["📥 Capa de Entrada (síncrona)"]
+        B["WebhookController + ShopifyHmacGuard<br/>Valida HMAC (HU1)"]
+        C["SyncShopifyOrderUseCase<br/>Verifica idempotencia"]
     end
 
     subgraph QUEUE["📬 Cola de Procesamiento"]
-        D["BullMQ<br/>order-processing queue"]
+        D["BullMQ<br/>order-processing queue (HU2)"]
     end
 
-    subgraph DOMAIN["⚙️ Lógica de Dominio"]
-        E["OrderProcessorService<br/>Inicia procesamiento"]
-        F["MaterialCalculatorService<br/>Calcula materiales"]
-        G{"¿Hay stock<br/>suficiente?"}
-        H["InventoryDomainService<br/>Reserva inventario"]
-        I["InventoryDomainService<br/>Consuma reserva"]
-        J["OrderStateMachine<br/>Actualiza estado"]
+    subgraph DOMAIN["⚙️ Lógica de Dominio (asíncrona)"]
+        E["ProcessOrderUseCase<br/>order.startProcessing()"]
+        F["PackagingCalculatorDomainService<br/>Calcula materiales (HU3)"]
+        G{"¿Hay stock<br/>suficiente? (HU4)"}
+        H["InventoryRepository<br/>reserve() con SELECT FOR UPDATE"]
+        J["order.complete() / order.fail()"]
     end
 
-    subgraph EVENTS["📡 Eventos de Dominio"]
-        EV1["OrderReceived"]
-        EV2["OrderProcessing"]
-        EV3["MaterialsCalculated"]
-        EV4["InventoryReserved"]
-        EV5["InventoryConsumed"]
-        EV6["OrderCompleted"]
-        EV7["OrderFailed"]
-        EV8["LowStockAlert"]
-    end
-
-    subgraph SINKS["📊 Consumidores de Eventos"]
-        K["AuditLogService<br/>Registra en BD"]
-        K2["DashboardService<br/>Actualiza UI via SSE"]
-        K3["NotificationService<br/>Envía alertas"]
+    subgraph PRESENTATION["📊 Panel Operativo (HU5)"]
+        K["Dashboard Vue 3<br/>Órdenes, inventario, filtros"]
+        L["Legacy PHP<br/>materiales-bajo-stock.php"]
     end
 
     A -->|"1. POST /webhooks/shopify"| B
     B -->|"2. Validación HMAC exitosa"| C
-    C -->|"3. Encolar trabajo"| D
+    C -->|"3. Encolar job"| D
     D -->|"4. Consumir trabajo"| E
-
-    E -->|"5. Publicar evento"| EV2
-    EV2 --> E
-    E -->|"6. Calcular materiales"| F
-    F -->|"7. Publicar evento"| EV3
-    EV3 --> F
-    F -->|"8. Retorna materiales"| G
-
+    E -->|"5. Calcular materiales"| F
+    F -->|"6. Retorna materiales"| G
     G -->|"Sí"| H
     G -->|"No"| J
-
-    H -->|"9. Publicar evento"| EV4
-    EV4 --> H
-    H -->|"10. Consumir inventario"| I
-    I -->|"11. Publicar evento"| EV5
-    EV5 --> I
-    I -->|"12. Marcar completada"| J
-    J -->|"13. Publicar evento"| EV6
-    EV6 --> J
-
-    J -->|"14. Marcar fallida"| EV7
-    EV7 --> J
-
-    EV1 -.->|"Orden recibida"| K
-    EV2 -.->|"Procesamiento iniciado"| K
-    EV3 -.->|"Materiales calculados"| K
-    EV4 -.->|"Inventario reservado"| K
-    EV5 -.->|"Inventario consumido"| K
-    EV6 -.->|"Orden completada"| K
-    EV7 -.->|"Orden fallida"| K
-
-    EV6 -.->|"Actualizar dashboard"| K2
-    EV7 -.->|"Mostrar error en dashboard"| K2
-    EV8 -.->|"Mostrar alerta bajo stock"| K2
-
-    EV8 -.->|"Notificar administrador"| K3
-
-    EV3 -.->|"Evaluar stock post-reserva"| F
-    F -->|"Stock < umbral"| EV8
+    H -->|"7a. Reservado"| J
+    H -->|"7b. Stock insuficiente"| J
+    J -->|"8a. COMPLETED"| K
+    J -->|"8b. FAILED"| K
+    H -->|"Consulta stock"| L
 ```
-
-### Catálogo de Eventos de Dominio
-
-| Evento | Descripción | Payload | Publicado por |
-|---|---|---|---|
-| `OrderReceived` | Webhook recibido y validado | `{ shopifyOrderId, eventId, timestamp }` | WebhookApplicationService |
-| `OrderProcessing` | Orden inició procesamiento | `{ orderId, shopifyOrderId, startedAt }` | OrderProcessorService |
-| `MaterialsCalculated` | Materiales calculados exitosamente | `{ orderId, materials[], totalItems, hasFragile }` | MaterialCalculatorService |
-| `InventoryReserved` | Stock reservado transaccionalmente | `{ orderId, reservations[], reservedAt }` | InventoryDomainService |
-| `InventoryConsumed` | Reserva consumida definitivamente | `{ orderId, consumedAt }` | InventoryDomainService |
-| `OrderCompleted` | Orden procesada exitosamente | `{ orderId, completedAt, materials[] }` | OrderStateMachine |
-| `OrderFailed` | Orden falló durante procesamiento | `{ orderId, reason, failedAt, stage }` | OrderStateMachine |
-| `LowStockAlert` | Stock por debajo del umbral | `{ materialId, currentStock, threshold, alertAt }` | StockAlertService |
 
 ---
 
@@ -521,185 +438,106 @@ flowchart TB
 
 ### Descripción
 
-El modelo de datos está diseñado para soportar las operaciones transaccionales del sistema, garantizando integridad referencial y soporte para auditoría completa.
+El modelo separa el catálogo de materiales (`materials`) del stock real (`inventory`), y mantiene un historial inmutable de movimientos (`inventory_movements`).
 
 ```mermaid
 erDiagram
-    %% ============================================
-    %% TABLA: orders
-    %% Almacena las órdenes recibidas de Shopify
-    %% ============================================
     orders {
-        uuid id PK "Identificador único interno"
-        varchar shopify_order_id UK "ID de la orden en Shopify (único)"
-        varchar shopify_order_number "Número de orden visible en Shopify"
-        varchar status "Estado: PROCESSING, COMPLETED, FAILED"
-        text failure_reason "Motivo del fallo (si aplica)"
-        integer total_products "Cantidad total de productos en la orden"
-        boolean has_fragile_items "Indica si contiene productos frágiles"
-        timestamp shopify_created_at "Fecha de creación en Shopify"
-        timestamp created_at "Fecha de recepción en el sistema"
-        timestamp updated_at "Última actualización"
-        timestamp completed_at "Fecha de completado"
+        uuid id PK
+        varchar shopify_order_id UK
+        order_status status "PENDING/PROCESSING/COMPLETED/FAILED"
+        varchar customer_email
+        numeric total_price
+        integer items_count
+        boolean has_fragile
+        box_type box_type "BOX_SMALL/BOX_MEDIUM/BOX_LARGE"
+        text error_message
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz processed_at
     }
 
-    %% ============================================
-    %% TABLA: order_items
-    %% Líneas de productos de cada orden
-    %% ============================================
     order_items {
-        uuid id PK "Identificador único"
-        uuid order_id FK "Referencia a la orden"
-        varchar shopify_product_id "ID del producto en Shopify"
-        varchar shopify_variant_id "ID de la variante en Shopify"
-        varchar sku "Código SKU del producto"
-        varchar title "Nombre del producto"
-        integer quantity "Cantidad de unidades"
-        boolean is_fragile "Indica si el producto es frágil"
-        decimal unit_price "Precio unitario"
-        timestamp created_at "Fecha de creación"
+        uuid id PK
+        uuid order_id FK
+        varchar product_name
+        integer quantity
+        numeric price
+        boolean is_fragile
+        varchar sku
+        timestamptz created_at
     }
 
-    %% ============================================
-    %% TABLA: order_materials
-    %% Materiales de empaque asignados a cada orden
-    %% ============================================
-    order_materials {
-        uuid id PK "Identificador único"
-        uuid order_id FK "Referencia a la orden"
-        uuid material_id FK "Referencia al material"
-        integer quantity "Cantidad de material asignada"
-        varchar material_type "Tipo: BOX_SMALL, BOX_MEDIUM, BOX_LARGE, LABEL, TAPE, FILLER"
-        timestamp created_at "Fecha de asignación"
-    }
-
-    %% ============================================
-    %% TABLA: materials
-    %% Catálogo de materiales de empaque
-    %% ============================================
     materials {
-        uuid id PK "Identificador único"
-        varchar sku UK "SKU del material (único)"
-        varchar name "Nombre del material"
-        varchar type "Tipo de material"
-        text description "Descripción del material"
-        integer current_stock "Stock actual disponible"
-        integer reserved_stock "Stock reservado (no disponible)"
-        integer low_stock_threshold "Umbral para alerta de bajo stock"
-        boolean is_active "Indica si el material está activo"
-        timestamp created_at "Fecha de creación"
-        timestamp updated_at "Última actualización"
+        uuid id PK
+        material_code code UK "BOX_SMALL/BOX_MEDIUM/BOX_LARGE/LABEL/TAPE/FILLER"
+        varchar name
+        text description
+        timestamptz created_at
     }
 
-    %% ============================================
-    %% TABLA: inventory_reservations
-    %% Reservas transaccionales de inventario
-    %% ============================================
-    inventory_reservations {
-        uuid id PK "Identificador único"
-        uuid order_id FK "Referencia a la orden"
-        uuid material_id FK "Referencia al material"
-        integer quantity "Cantidad reservada"
-        varchar status "Estado: PENDING, CONSUMED, RELEASED"
-        timestamp expires_at "Expiración de la reserva (timeout)"
-        timestamp consumed_at "Fecha de consumo definitivo"
-        timestamp created_at "Fecha de creación de la reserva"
-        timestamp updated_at "Última actualización"
+    inventory {
+        uuid id PK
+        uuid material_id FK,UK
+        integer quantity_available
+        integer quantity_reserved
+        integer minimum_stock
+        timestamptz last_updated_at
+        integer version
     }
 
-    %% ============================================
-    %% TABLA: inventory_transactions
-    %% Registro de todas las transacciones de inventario
-    %% ============================================
-    inventory_transactions {
-        uuid id PK "Identificador único"
-        uuid material_id FK "Referencia al material"
-        uuid order_id FK "Referencia a la orden (si aplica)"
-        varchar transaction_type "Tipo: RESERVATION, CONSUMPTION, RELEASE, ADJUSTMENT"
-        integer quantity "Cantidad (positiva o negativa)"
-        integer stock_before "Stock antes de la transacción"
-        integer stock_after "Stock después de la transacción"
-        text reason "Motivo de la transacción"
-        timestamp created_at "Fecha de la transacción"
+    inventory_movements {
+        uuid id PK
+        uuid inventory_id FK
+        uuid order_id FK "nullable"
+        movement_type movement_type "RESERVE/CONSUME/RELEASE/ADJUSTMENT"
+        integer quantity
+        integer quantity_before
+        integer quantity_after
+        text reason
+        timestamptz created_at
     }
 
-    %% ============================================
-    %% TABLA: webhook_events
-    %% Registro de todos los webhooks recibidos
-    %% ============================================
+    order_materials {
+        uuid id PK
+        uuid order_id FK
+        uuid material_id FK
+        integer quantity_required
+        integer quantity_reserved
+        integer quantity_consumed
+        order_material_status status "PENDING/RESERVED/CONSUMED/RELEASED"
+        timestamptz created_at
+    }
+
     webhook_events {
-        uuid id PK "Identificador único"
-        varchar shopify_order_id "ID de la orden en Shopify"
-        varchar webhook_topic "Tipo de webhook: orders/create"
-        varchar hmac_signature "Firma HMAC del webhook"
-        jsonb payload "Payload completo del webhook"
-        varchar processing_status "Estado: PENDING, PROCESSED, FAILED"
-        text error_message "Mensaje de error (si falló)"
-        integer retry_count "Número de reintentos"
-        timestamp created_at "Fecha de recepción"
-        timestamp processed_at "Fecha de procesamiento"
+        uuid id PK
+        varchar shopify_event_id UK
+        varchar topic
+        jsonb payload
+        webhook_status status "PENDING/PROCESSED/FAILED/DUPLICATE"
+        integer attempts
+        timestamptz received_at
     }
 
-    %% ============================================
-    %% TABLA: audit_logs
-    %% Registro de auditoría de todas las acciones
-    %% ============================================
-    audit_logs {
-        uuid id PK "Identificador único"
-        uuid order_id FK "Referencia a la orden (si aplica)"
-        uuid material_id FK "Referencia al material (si aplica)"
-        varchar action "Acción realizada"
-        varchar entity_type "Tipo de entidad afectada"
-        uuid entity_id "ID de la entidad afectada"
-        jsonb details "Detalles adicionales en JSON"
-        varchar performed_by "Usuario o sistema que realizó la acción"
-        timestamp created_at "Fecha de la acción"
-    }
-
-    %% ============================================
-    %% TABLA: stock_alerts
-    %% Alertas generadas por bajo stock
-    %% ============================================
-    stock_alerts {
-        uuid id PK "Identificador único"
-        uuid material_id FK "Referencia al material"
-        varchar alert_type "Tipo: LOW_STOCK, CRITICAL_STOCK, OUT_OF_STOCK"
-        integer current_stock "Stock actual al generar la alerta"
-        integer threshold "Umbral configurado"
-        boolean is_acknowledged "Indica si la alerta fue reconocida"
-        varchar acknowledged_by "Usuario que reconoció la alerta"
-        timestamp acknowledged_at "Fecha de reconocimiento"
-        timestamp created_at "Fecha de creación de la alerta"
-    }
-
-    %% ============================================
-    %% RELACIONES
-    %% ============================================
     orders ||--o{ order_items : "tiene"
     orders ||--o{ order_materials : "requiere"
-    orders ||--o{ inventory_reservations : "tiene"
-    orders ||--o{ inventory_transacciones : "genera"
-    orders ||--o{ audit_logs : "registra"
+    orders ||--o{ inventory_movements : "genera"
+    materials ||--|| inventory : "tiene stock (1:1)"
     materials ||--o{ order_materials : "usado en"
-    materials ||--o{ inventory_reservations : "reservado en"
-    materials ||--o{ inventory_transacciones : "afectado por"
-    materials ||--o{ stock_alertas : "genera"
-    webhook_events ||--|| orders : "origina"
+    inventory ||--o{ inventory_movements : "historial de"
 ```
 
 ### Descripción de Tablas
 
 | Tabla | Propósito | Restricciones Clave |
 |---|---|---|
-| `orders` | Almacena órdenes de Shopify con su estado actual | `shopify_order_id` UNIQUE NOT NULL |
-| `order_items` | Líneas de productos de cada orden | FK a `orders.id`, cantidad > 0 |
-| `order_materials` | Materiales de empaque asignados por orden | FK a `orders.id` y `materials.id` |
-| `materials` | Catálogo de materiales con stock actual | `sku` UNIQUE, `current_stock` >= 0 |
-| `inventory_reservations` | Reservas transaccionales con expiración | FK a `orders.id` y `materials.id` |
-| `inventory_transactions` | Historial inmutable de movimientos de stock | Todas las transacciones son append-only |
-| `webhook_events` | Registro de webhooks para trazabilidad y replay | `shopify_order_id` para idempotencia |
-| `audit_logs` | Auditoría completa de todas las operaciones | Append-only, no se eliminan registros |
-| `stock_alertas` | Alertas de bajo stock con reconocimiento | FK a `materials.id` |
+| `orders` | Órdenes de Shopify con estado actual | `shopify_order_id` UNIQUE |
+| `order_items` | Líneas de productos de cada orden | FK a `orders.id` |
+| `materials` | Catálogo de materiales (sin stock) | `code` UNIQUE |
+| `inventory` | Stock disponible/reservado por material | `material_id` UNIQUE |
+| `inventory_movements` | Historial inmutable de movimientos | append-only |
+| `order_materials` | Materiales asignados a cada orden | FK a `orders.id` y `materials.id` |
+| `webhook_events` | Registro de cada webhook recibido | `shopify_event_id` UNIQUE |
 
 ---
 
@@ -708,297 +546,135 @@ erDiagram
 ### ADR-001: Selección de PostgreSQL como Base de Datos Principal
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-15
-**Decisores:** Arquitecto de Software Senior
 
-**Contexto:**
-El sistema necesita una base de datos transaccional que garantice ACID compliance para las operaciones de inventario (reserva y consumo). Las operaciones de reserva requieren lecturas y escrituras concurrentes con aislamiento estricto para prevenir race conditions. Además, el sistema necesita soportar consultas complejas para el dashboard y reportes de auditoría.
+**Contexto:** El sistema necesita una base de datos transaccional que garantice ACID compliance para las operaciones de inventario (reserva y consumo). Las operaciones requieren aislamiento estricto para prevenir race conditions.
 
-**Decisión:**
-Seleccionar **PostgreSQL v14+** como la base de datos principal del sistema. Utilizaremos el nivel de aislamiento SERIALIZABLE para las transacciones de inventario y SELECT ... FOR UPDATE para el bloqueo pesimista a nivel de fila.
+**Decisión:** Seleccionar **PostgreSQL** como base de datos principal. Utilizaremos `SELECT ... FOR UPDATE` para el bloqueo pesimista a nivel de fila.
 
 **Consecuencias:**
-- **Positivas:**
-  - ACID compliance nativo garantiza consistencia transaccional
-  - SELECT ... FOR UPDATE previene race conditions en reservas concurrentes
-  - Soporte para JSONB permite almacenar payloads de webhooks de forma flexible
-  - Índices parciales y de expresión optimizan consultas del dashboard
-  - Replicación nativa para futura escalabilidad de lecturas
-- **Negativas:**
-  - Requiere gestión de conexiones (PgBouncer) para manejar alta concurrencia
-  - El nivel SERIALIZABLE puede causar más abortos de transacciones bajo alta contención
-  - Mayor complejidad operacional comparada con bases de datos NoSQL
-- **Alternativas consideradas:**
-  - MySQL: Menor soporte para JSONB y niveles de aislamiento
-  - MongoDB: No ACID transaccional nativo (hasta v4.0 con limitaciones)
+- **Positivas:** ACID compliance nativo, prevención de race conditions, soporte para JSONB.
+- **Negativas:** Requiere gestión de conexiones para alta concurrencia.
+- **Alternativas consideradas:** MySQL, MongoDB.
 
 ---
 
 ### ADR-002: Uso de BullMQ sobre RabbitMQ para Cola de Trabajos
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-15
 
-**Contexto:**
-El sistema necesita un sistema de colas para el procesamiento asíncrono de webhooks. Los requisitos incluyen: reintentos con backoff exponencial, dead letter queues, priorización de trabajos, y visibilidad del estado de la cola. Ya hemos seleccionado Redis como capa de caché, por lo que la integración con Redis es deseable.
+**Contexto:** El sistema necesita un sistema de colas para el procesamiento asíncrono de órdenes (HU2). Ya se seleccionó Redis como capa de caché.
 
-**Decisión:**
-Utilizar **BullMQ** como sistema de colas, usando Redis como backend. BullMQ es una librería Node.js nativa que se integra directamente con nuestro stack NestJS y Redis existente.
+**Decisión:** Utilizar **BullMQ** con Redis como backend. Integración nativa con NestJS/TypeScript.
 
 **Consecuencias:**
-- **Positivas:**
-  - Integración nativa con Node.js/TypeScript (mismo stack que NestJS)
-  - Reutiliza la instancia de Redis existente (menor infraestructura)
-  - Soporte nativo para reintentos con backoff exponencial
-  - Dead letter queue integrada
-  - Dashboard de monitoreo de colas disponible (BullBoard)
-  - Soporte para trabajos delayed, repeatables y con prioridad
-- **Negativas:**
-  - Dependencia de Redis (punto único de fallo si no está clusterizado)
-  - Menos maduro que RabbitMQ para patrones de mensajería complejos
-  - No soporta patrones de mensajería empresarial (AMQP) nativamente
-- **Alternativas consideradas:**
-  - RabbitMQ: Requiere infraestructura adicional, integración más compleja con Node.js
-  - AWS SQS: Introduce dependencia de cloud vendor, latencia variable
-  - Kafka: Overkill para este caso de uso, mayor complejidad operacional
+- **Positivas:** Reutiliza Redis existente, reintentos con backoff exponencial, dead letter queue.
+- **Negativas:** Dependencia de Redis como punto único de fallo.
+- **Alternativas consideradas:** RabbitMQ, AWS SQS, Kafka.
 
 ---
 
 ### ADR-003: Bloqueo Pesimista para Operaciones de Inventario
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-16
 
-**Contexto:**
-Las operaciones de reserva de inventario son el punto crítico de concurrencia del sistema. Dos órdenes pueden intentar reservar el último material simultáneamente. El sistema debe garantizar que nunca se venda más stock del disponible (no se permiten ventas en descubierto). La atomicidad de la reserva de múltiples materiales es fundamental (RF-010: no descuentos parciales).
+**Contexto:** Las operaciones de reserva de inventario son el punto crítico de concurrencia (HU4). El sistema debe garantizar que nunca se venda más stock del disponible.
 
-**Decisión:**
-Implementar **bloqueo pesimista** usando `SELECT ... FOR UPDATE` dentro de transacciones con nivel de aislamiento SERIALIZABLE para todas las operaciones de reserva de inventario. La transacción verifica TODOS los materiales antes de reservar CUALQUIER material.
+**Decisión:** Implementar **bloqueo pesimista** usando `SELECT ... FOR UPDATE` dentro de transacciones ACID. Acceder a materiales siempre en orden por ID (previene deadlocks).
 
 **Consecuencias:**
-- **Positivas:**
-  - Garantiza consistencia absoluta del inventario
-  - Previene completamente las condiciones de carrera
-  - Implementación simple y predecible
-  - Fácil de razonar sobre el comportamiento
-- **Negativas:**
-  - Puede causar contención en picos de alta demanda
-  - Transacciones largas pueden bloquear otras operaciones
-  - Riesgo de deadlocks si no se ordenan consistentemente los accesos
-- **Mitigaciones:**
-  - Acceder a materiales siempre en orden por ID (previene deadlocks)
-  - Mantener transacciones lo más cortas posible
-  - Timeout de transacción configurado (5 segundos)
-- **Alternativas consideradas:**
-  - Bloqueo optimista con versión: Requiere reintentos complejos y puede fallar frecuentemente bajo contención
-  - Redis distribuido (Redlock): Complejidad adicional, consistencia eventual
+- **Positivas:** Consistencia absoluta, prevención completa de race conditions.
+- **Negativas:** Posible contención bajo alta demanda.
+- **Alternativas consideradas:** Bloqueo optimista, Redis distribuido (Redlock).
 
 ---
 
 ### ADR-004: Validación HMAC para Webhooks de Shopify
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-16
 
-**Contexto:**
-Shopify envía webhooks a nuestro endpoint público. Es crítico garantizar que los webhooks recibidos son auténticamente originados por Shopify y no por actores maliciosos. Un atacante podría enviar webhooks falsos para agotar inventario o corromper datos.
+**Contexto:** Shopify envía webhooks a nuestro endpoint público. Es crítico garantizar que los webhooks son auténticos (HU1).
 
-**Decisión:**
-Implementar validación estricta de **HMAC-SHA256** en cada webhook recibido. El secreto compartido se almacena como variable de entorno y nunca se expone en logs o respuestas. La validación ocurre antes de cualquier procesamiento del payload.
+**Decisión:** Implementar validación estricta de **HMAC-SHA256** en cada webhook recibido.
 
 **Consecuencias:**
-- **Positivas:**
-  - Seguridad probada y recomendada por Shopify
-  - Implementación simple y estándar
-  - Bajo costo computacional (HMAC es rápido)
-  - Previene ataques de replay si se combina con idempotencia
-- **Negativas:**
-  - Requiere gestión segura del secreto compartido
-  - Si el secreto se compromite, toda la seguridad falla
-- **Mitigaciones:**
-  - Rotación periódica del secreto
-  - Almacenamiento en vault/secrets manager (no en código)
-  - Log de intentos de validación fallida para detección de ataques
+- **Positivas:** Seguridad probada, bajo costo computacional.
+- **Negativas:** Requiere gestión segura del secreto compartido.
+- **Mitigaciones:** Rotación periódica del secreto, almacenamiento en vault.
 
 ---
 
-### ADR-005: Idempotencia mediante Unique Constraint en shopify_order_id
+### ADR-005: Idempotencia mediante Unique Constraint
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-17
 
-**Contexto:**
-Shopify puede enviar webhooks duplicados para la misma orden (por reintentos de su lado, problemas de red, etc.). Procesar un webhook duplicado resultaría en doble descuento de inventario o estados inconsistentes. El sistema debe ser idempotente.
+**Contexto:** Shopify puede enviar webhooks duplicados para la misma orden (HU1). Procesar un duplicado resultaría en doble descuento de inventario.
 
-**Decisión:**
-Crear un **unique constraint** en el campo `shopify_order_id` de la tabla `orders`. Antes de crear una nueva orden, verificar si ya existe. Si existe y está en estado terminal (COMPLETED/FAILED), ignorar el webhook. Si existe y está en PROCESSING, responder 200 OK sin reprocesar.
+**Decisión:** Crear un **unique constraint** en `webhook_events.shopify_event_id` con `ON CONFLICT DO NOTHING`.
 
 **Consecuencias:**
-- **Positivas:**
-  - Garantiza procesamiento único a nivel de base de datos
-  - El unique constraint es la última línea de defensa (aunque la aplicación verifique primero)
-  - Simple de implementar y verificar
-  - No requiere estado adicional en Redis para idempotencia
-- **Negativas:**
-  - Requiere manejo de excepciones de violación de unique constraint
-  - Si se necesita reprocesamiento, requiere intervención manual
-- **Alternativas consideradas:**
-  - Redis SETNX para idempotencia: Requiere TTL y puede perder estado si Redis se reinicia
-  - Tabla separada de idempotencia: Complejidad adicional innecesaria
+- **Positivas:** Garantiza procesamiento único a nivel de base de datos.
+- **Negativas:** Requiere manejo de excepciones de violación de constraint.
+- **Alternativas consideradas:** Redis SETNX, tabla separada de idempotencia.
 
 ---
 
-### ADR-006: Event-Driven Architecture con Redis Pub/Sub
+### ADR-006: Procesamiento Asíncrono con BullMQ
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-17
 
-**Contexto:**
-El sistema necesita notificar múltiples consumidores sobre cambios de estado: el dashboard debe actualizarse en tiempo real, el servicio de auditoría debe registrar eventos, y el servicio de alertas debe evaluar umbrales. Estos consumidores deben estar desacoplados del procesamiento principal.
+**Contexto:** El webhook debe responder rápido sin ejecutar lógica de negocio pesada (HU1). El procesamiento real debe ser desacoplado (HU2).
 
-**Decisión:**
-Utilizar **Redis Pub/Sub** para la publicación y suscripción a eventos de dominio en tiempo real. Los eventos se publican como mensajes serializados en JSON a canales específicos (ej., `order:completed`, `order:failed`, `stock:alert`).
+**Decisión:** El webhook solo registra el evento y encola un job en BullMQ. Un worker separado consume los jobs y ejecuta el procesamiento.
 
 **Consecuencias:**
-- **Positivas:**
-  - Desacoplamiento total entre productores y consumidores
-  - Baja latencia en notificaciones
-  - Reutiliza infraestructura Redis existente
-  - Fácil agregar nuevos consumidores sin modificar productores
-  - Server-Sent Events (SSE) para dashboard en tiempo real
-- **Negativas:**
-  - Redis Pub/Sub es fire-and-forget (no persistencia de mensajes)
-  - Si un consumidor está desconectado, pierde mensajes
-  - No hay garantía de entrega
-- **Mitigaciones:**
-  - Los eventos de dominio también se persisten en `event_store` para replay
-  - El dashboard puede solicitar estado actual vía REST si pierde conexión
-  - Para eventos críticos (auditoría), usar transacción de BD en lugar de Pub/Sub
-- **Alternativas consideradas:**
-  - Webhooks salientes: Requiere gestión de suscriptores y reintentos
-  - Kafka: Overkill para la escala actual del sistema
+- **Positivas:** Respuesta rápida al webhook, soporte para picos de demanda, reintentos automáticos.
+- **Negativas:** Complejidad adicional de la cola, delay en el procesamiento.
+- **Alternativas consideradas:** Procesamiento síncrono, threads en el mismo proceso.
 
 ---
 
-### ADR-007: CQRS Ligero para el Dashboard
+### ADR-007: Arquitectura Hexagonal con DDD
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-18
 
-**Contexto:**
-El dashboard necesita mostrar datos agregados (órdenes recientes, niveles de inventario, métricas de rendimiento) que no requieren la misma consistencia transaccional que las operaciones de escritura. Las consultas del dashboard pueden tolerar consistencia eventual y deben ser optimizadas para lectura, sin afectar el rendimiento de las operaciones de procesamiento de órdenes.
+**Contexto:** El sistema debe ser mantenible y escalable. Las reglas de negocio deben estar aisladas de la infraestructura.
 
-**Decisión:**
-Implementar un **patrón CQRS ligero** donde:
-- Las escrituras (comandos) van al modelo transaccional normalizado en PostgreSQL
-- Las consultas del dashboard usan vistas materializadas y caché Redis
-- Los eventos de dominio actualizan las vistas de lectura de forma asíncrona
+**Decisión:** Implementar **arquitectura hexagonal (Ports & Adapters)** con **Domain-Driven Design**. El dominio es la única fuente de verdad.
 
 **Consecuencias:**
-- **Positivas:**
-  - Las consultas del dashboard no afectan las transacciones de inventario
-  - Vistas materializadas optimizan consultas complejas de agregación
-  - Caché Redis reduce la carga en PostgreSQL
-  - Permite escalar lecturas y escrituras independientemente en el futuro
-- **Negativas:**
-  - Consistencia eventual (el dashboard puede mostrar datos ligeramente desactualizados)
-  - Complejidad adicional en la actualización de vistas
-  - Necesidad de invalidar caché correctamente
-- **Alternativas consideradas:**
-  - Consultas directas a tablas normalizadas: Riesgo de afectar rendimiento transaccional
-  - Base de datos de lectura separada: Complejidad operacional excesiva para la escala actual
+- **Positivas:** Alta mantenibilidad, testabilidad, independencia de frameworks.
+- **Negativas:** Mayor complejidad inicial, más archivos/estructura.
+- **Alternativas consideradas:** Arquitectura en capas tradicional, ActiveRecord.
 
 ---
 
-### ADR-008: Estrategia de Reintentos con Backoff Exponencial y Dead Letter Queue
+### ADR-008: Componente PHP Legacy
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-18
 
-**Contexto:**
-El procesamiento de órdenes puede fallar por razones transitorias (timeout de BD, problemas de red, etc.) o permanentes (datos inválidos, stock insuficiente). Los fallos transitorios deben reintentarse automáticamente, mientras que los fallos permanentes no deben desperdiciar recursos en reintentos infinitos.
+**Contexto:** El sistema legacy existente tiene integraciones que dependen de un endpoint PHP para consultar materiales con bajo inventario (HU5).
 
-**Decisión:**
-Configurar BullMQ con la siguiente estrategia de reintentos:
-- **Máximo 3 reintentos** por trabajo
-- **Backoff exponencial**: 2s, 4s, 8s
-- **Dead Letter Queue (DLQ)**: Después de 3 fallos, el trabajo se mueve a DLQ
-- **Idempotencia**: Si la orden ya está en estado terminal, no reintentar
-- **DLQ monitoring**: Alerta cuando trabajos se acumulan en DLQ
+**Decisión:** Mantener un **endpoint PHP legacy** (`materiales-bajo-stock.php`) que consulta directamente PostgreSQL.
 
 **Consecuencias:**
-- **Positivas:**
-  - Manejo automático de fallos transitorios
-  - Los fallos permanentes no consumen recursos de reintentos
-  - DLQ permite análisis y reprocesamiento manual de fallos
-  - Backoff exponencial previene thundering herd
-- **Negativas:**
-  - Delay en el procesamiento de fallos transitorios (hasta 14s total)
-  - Requiere monitoreo de DLQ para no perder trabajos
-  - Posible confusión si una orden aparece como PROCESSING por mucho tiempo
-- **Mitigaciones:**
-  - Timeout máximo de PROCESSING: 5 minutos → FAILED automático
-  - Alerta si DLQ tiene más de 10 trabajos
-  - Dashboard muestra trabajos en DLQ con detalles del error
+- **Positivas:** Compatibilidad con integraciones existentes sin cambios.
+- **Negativas:** Deuda técnica, dos lenguajes en el stack.
+- **Mitigaciones:** Documentar como deprecated con plan de migración.
 
 ---
 
-### ADR-009: Mantenimiento del Endpoint PHP Legacy
+### ADR-009: Docker Compose para Desarrollo
 
 **Estado:** Aceptado
-**Fecha:** 2024-01-19
 
-**Contexto:**
-El sistema legacy existente tiene integraciones que dependen de un endpoint PHP para consultar materiales con bajo stock. Este endpoint no puede ser discontinuado inmediatamente. El nuevo sistema debe mantener esta funcionalidad mientras se planifica una migración gradual.
+**Contexto:** El sistema tiene múltiples servicios que necesitan ejecutarse juntos (NestJS, Vue 3, PostgreSQL, Redis, PHP).
 
-**Decisión:**
-Mantener un **endpoint PHP legacy** (`/low-stock`) que consulta directamente la tabla `materials` de PostgreSQL. El endpoint se despliega como un contenedor PHP separado que comparte la misma base de datos PostgreSQL. Se documenta como deprecated con plan de migración a futuro.
+**Decisión:** Utilizar **Docker Compose** para definir y orquestar todos los servicios.
 
 **Consecuencias:**
-- **Positivas:**
-  - Compatibilidad con integraciones existentes sin cambios
-  - No bloquea el desarrollo del nuevo sistema
-  - Bajo riesgo: es una consulta simple de solo lectura
-- **Negativas:**
-  - Deuda técnica que debe ser eliminada
-  - Dos lenguajes en el stack (operacionalmente más complejo)
-  - El endpoint PHP no se beneficia de la caché Redis
-- **Mitigaciones:**
-  - Documentar como deprecated con fecha límite de eliminación
-  - El endpoint PHP es de solo lectura, no afecta consistencia
-  - Plan de migración: exponer misma funcionalidad en la API NestJS
-- **Alternativas consideradas:**
-  - Migrar todo a Node.js inmediatamente: Riesgo de romper integraciones existentes
-  - API Gateway que traduzca peticiones: Complejidad innecesaria
-
----
-
-### ADR-010: Docker Compose para Desarrollo y Despliegue Local
-
-**Estado:** Aceptado
-**Fecha:** 2024-01-19
-
-**Contexto:**
-El sistema tiene múltiples servicios (NestJS API, NestJS Worker, Vue 3 Frontend, PostgreSQL, Redis, PHP Legacy) que necesitan ejecutarse juntos. Los desarrolladores necesitan un entorno de desarrollo que sea fácil de configurar y que refleje la arquitectura de producción.
-
-**Decisión:**
-Utilizar **Docker Compose** para definir y orquestar todos los servicios del sistema. Cada servicio se ejecuta en su propio contenedor con volúmenes para desarrollo en caliente (hot reload) y redes internas para comunicación entre contenedores.
-
-**Consecuencias:**
-- **Positivas:**
-  - Entorno de desarrollo reproducible con un comando (`docker compose up`)
-  - Aílamiento entre servicios
-  - Fácil de configurar para nuevos desarrolladores
-  - Refleja la arquitectura de producción
-  - Permite probar la integración completa localmente
-- **Negativas:**
-  - Docker Compose no es adecuado para producción (requiere Kubernetes o similar)
-  - Overhead de contenedores en máquinas con pocos recursos
-  - Debugging más complejo que ejecución nativa
-- **Mitigaciones:**
-  - `docker-compose.override.yml` para configuraciones específicas de desarrollo
-  - Documentación clara de requisitos de hardware
-  - Perfiles de Docker Compose para ejecutar subconjuntos de servicios
+- **Positivas:** Entorno reproducible con un comando, refleja arquitectura de producción.
+- **Negativas:** No adecuado para producción (requiere Kubernetes).
+- **Mitigaciones:** Perfiles de Docker Compose para ejecutar subconjuntos de servicios.
 
 ---
 
@@ -1006,106 +682,53 @@ Utilizar **Docker Compose** para definir y orquestar todos los servicios del sis
 
 ### Descripción
 
-El mapa de bounded contexts muestra la descomposición del dominio en contextos delimitados, sus relaciones, los lenguajes ubicuos y los mecanismos de integración entre ellos.
-
 ```mermaid
 flowchart TB
     subgraph SHOPIFY_INTEGRATION["🔗 Shopify Integration Context"]
-        direction TB
-        S1["Webhook Receiver<br/>Valida HMAC, extrae datos"]
-        S2["Event Store<br/>Registra webhooks recibidos"]
-        S3["Idempotency Guard<br/>Previene duplicados"]
-        S1 --> S2
-        S1 --> S3
+        S1["Webhook Receiver (HU1)"]
+        S2["Idempotency Guard"]
     end
 
     subgraph ORDERS["📦 Orders Context"]
-        direction TB
-        O1["Order Lifecycle<br/>Máquina de estados"]
-        O2["Order Items<br/>Líneas de productos"]
-        O3["Order Materials<br/>Materiales asignados"]
-        O4["Order Processor<br/>Orquesta flujo completo"]
-        O1 --> O2
-        O1 --> O3
-        O4 --> O1
+        O1["Order Lifecycle"]
+        O2["Order Processor (HU2)"]
     end
 
     subgraph INVENTORY["📊 Inventory Context"]
-        direction TB
-        I1["Material Catalog<br/>Catálogo de materiales"]
-        I2["Stock Management<br/>Reserva y consumo"]
-        I3["Stock Alerts<br/>Evaluación de umbrales"]
-        I4["Inventory Transactions<br/>Historial de movimientos"]
-        I1 --> I2
-        I2 --> I3
-        I2 --> I4
+        I1["Stock Management (HU4)"]
+        I2["Stock Alerts"]
     end
 
     subgraph PACKAGING["🎁 Packaging Context"]
-        direction TB
-        P1["Material Calculator<br/>Reglas de cálculo"]
-        P2["Box Selection<br/>Selección de caja"]
-        P3["Fragile Detection<br/>Detección de frágiles"]
-        P1 --> P2
-        P1 --> P3
+        P1["Material Calculator (HU3)"]
     end
 
-    subgraph LEGACY["🏛️ Legacy Integration Context"]
-        direction TB
-        L1["Low Stock Endpoint<br/>PHP /low-stock"]
-        L2["Legacy Consumer<br/>Sistema existente"]
-        L1 --> L2
+    subgraph LEGACY["🏛️ Legacy Context"]
+        L1["Low Stock Endpoint (HU5)"]
     end
 
     subgraph MONITORING["📈 Monitoring Context"]
-        direction TB
-        M1["Dashboard API<br/>Consultas agregadas"]
-        M2["Real-time Updates<br/>SSE/WebSocket"]
-        M3["Metrics Collector<br/>KPIs del sistema"]
-        M1 --> M2
-        M1 --> M3
+        M1["Dashboard Vue 3 (HU5)"]
     end
 
-    %% Relaciones entre contextos
-    SHOPIFY_INTEGRATION -->|"OrderReceived<br/>[Evento de Dominio]"| ORDERS
-    ORDERS -->|"MaterialsCalculated<br/>[Evento de Dominio]"| PACKAGING
-    PACKAGING -->|"MaterialsCalculated<br/>[Evento de Dominio]"| INVENTORY
-    INVENTORY -->|"InventoryReserved / OrderCompleted<br/>[Evento de Dominio]"| ORDERS
-    INVENTORY -->|"LowStockAlert<br/>[Evento de Dominio]"| MONITORING
-    ORDERS -->|"OrderCompleted / OrderFailed<br/>[Evento de Dominio]"| MONITORING
-    INVENTORY -->|"Consulta directa<br/>[BD compartida]"| LEGACY
-
-    %% Estilos
-    style SHOPIFY_INTEGRATION fill:#e3f2fd,stroke:#1565c0,color:#000
-    style ORDERS fill:#e8f5e9,stroke:#2e7d32,color:#000
-    style INVENTORY fill:#fff3e0,stroke:#e65100,color:#000
-    style PACKAGING fill:#f3e5f5,stroke:#6a1b9a,color:#000
-    style LEGACY fill:#fce4ec,stroke:#c62828,color:#000
-    style MONITORING fill:#e0f2f1,stroke:#004d40,color:#000
+    SHOPIFY_INTEGRATION -->|"OrderReceived"| ORDERS
+    ORDERS -->|"MaterialsCalculated"| PACKAGING
+    PACKAGING -->|"MaterialsRequired"| INVENTORY
+    INVENTORY -->|"InventoryReserved / OrderCompleted"| ORDERS
+    INVENTORY -->|"LowStock"| MONITORING
+    INVENTORY -->|"Consulta directa"| LEGACY
 ```
 
 ### Descripción de Bounded Contexts
 
-| Contexto | Responsabilidad | Lenguaje Ubicuo | Integración |
-|---|---|---|---|
-| **Shopify Integration** | Recepción y validación de webhooks de Shopify | Webhook, HMAC, Payload, Event Store | Publica `OrderReceived` → Orders |
-| **Orders** | Ciclo de vida de órdenes, estados, materiales asignados | Order, Status, PROCESSING, COMPLETED, FAILED | Recibe `OrderReceived`, publica `OrderCompleted/Failed` |
-| **Inventory** | Gestión de stock, reservas, consumo, alertas | Material, Stock, Reservation, Threshold, Alert | Recibe `MaterialsCalculated`, publica `InventoryReserved`, `LowStockAlert` |
-| **Packaging** | Cálculo de materiales según reglas de negocio | Box Type, Label, Tape, Filler, Fragile | Recibe solicitud de cálculo, retorna materiales |
-| **Legacy Integration** | Endpoint PHP para consultas de bajo stock | Low Stock, Threshold | Lee directamente de PostgreSQL |
-| **Monitoring** | Dashboard, métricas, actualizaciones en tiempo real | Dashboard, Metrics, KPI, Alert | Consume eventos de todos los contextos |
-
-### Relaciones entre Contextos
-
-| Relación | Tipo | Mecanismo |
+| Contexto | Responsabilidad | HU Relacionada |
 |---|---|---|
-| Shopify Integration → Orders | Event-Driven | `OrderReceived` via BullMQ |
-| Orders → Packaging | Synchronous (in-process) | Llamada directa a MaterialCalculatorService |
-| Packaging → Inventory | Event-Driven | `MaterialsCalculated` via Redis Pub/Sub |
-| Inventory → Orders | Event-Driven | `InventoryReserved` / `OrderCompleted` via Redis Pub/Sub |
-| Inventory → Monitoring | Event-Driven | `LowStockAlert` via Redis Pub/Sub |
-| Orders → Monitoring | Event-Driven | `OrderCompleted` / `OrderFailed` via Redis Pub/Sub |
-| Legacy → Inventory | Shared Database | Consulta directa a tabla `materials` |
+| **Shopify Integration** | Recepción y validación de webhooks, idempotencia | HU1 |
+| **Orders** | Ciclo de vida de órdenes, procesamiento masivo | HU2 |
+| **Inventory** | Gestión de stock, reservas atómicas | HU4 |
+| **Packaging** | Cálculo de materiales según reglas de negocio | HU3 |
+| **Legacy** | Endpoint PHP para consultas de bajo stock | HU5 |
+| **Monitoring** | Dashboard, filtros, estados de carga/error | HU5 |
 
 ---
 
@@ -1113,370 +736,63 @@ flowchart TB
 
 ### Comunicación Síncrona (HTTP/REST)
 
-```
-┌─────────────┐     HTTPS/JSON      ┌─────────────┐
-│  Shopify    │ ──────────────────► │  API Backend │
-│  Platform   │ ◄────────────────── │  (NestJS)    │
-└─────────────┘     HTTP 200        └─────────────┘
-                                             │
-┌─────────────┐     HTTPS/JSON              │
-│  Frontend   │ ──────────────────►         │
-│  (Vue 3)    │ ◄──────────────────         │
-└─────────────┘                              │
-                                             │
-┌─────────────┐     HTTPS/JSON              │
-│  Legacy     │ ──────────────────►         │
-│  Consumer   │ ◄──────────────────         │
-└─────────────┘                              │
-```
+| Origen | Destino | Protocolo | Uso |
+|---|---|---|---|
+| Shopify | API Backend | HTTPS/JSON | Webhooks `orders/create` |
+| Frontend Vue 3 | API Backend | HTTPS/JSON | Consultas del dashboard |
+| Legacy PHP | PostgreSQL | TCP/PDO | Consulta de bajo stock |
 
-### Comunicación Asíncrona (BullMQ + Redis Pub/Sub)
+### Comunicación Asíncrona (BullMQ + Redis)
 
-```
-┌─────────────┐    BullMQ Job     ┌─────────────┐
-│  API Backend│ ────────────────► │   Worker     │
-│  (Producer) │                   │  (Consumer)  │
-└─────────────┘                   └──────┬──────┘
-                                         │
-                                   Redis Pub/Sub
-                                         │
-                    ┌────────────────────┼────────────────────┐
-                    │                    │                    │
-              ┌─────▼─────┐      ┌──────▼──────┐     ┌──────▼──────┐
-              │  Audit    │      │  Dashboard  │     │  Notification│
-              │  Service  │      │  SSE Push   │     │  Service     │
-              └───────────┘      └─────────────┘     └─────────────┘
-```
-
-### Protocolos de Comunicación
-
-| Origen | Destino | Protocolo | Patrón | Datos |
-|---|---|---|---|---|
-| Shopify | API Backend | HTTPS | Request/Response | JSON (webhook payload) |
-| API Backend | Shopify | HTTPS | Response | HTTP 200/401 |
-| API Backend | BullMQ | Redis Protocol | Producer/Consumer | JSON (job data) |
-| BullMQ | Worker | Redis Protocol | Consumer | JSON (job data) |
-| Worker | PostgreSQL | TCP | Repository | SQL |
-| Worker | Redis | TCP | Pub/Sub | JSON (domain events) |
-| Redis | Frontend | SSE | Push | JSON (events) |
-| Frontend | API Backend | HTTPS | Request/Response | JSON (REST API) |
-| Legacy PHP | PostgreSQL | TCP | Direct Query | SQL |
+| Origen | Destino | Mecanismo | Uso |
+|---|---|---|---|
+| API Backend | Worker | BullMQ Job | Encolar procesamiento de órdenes |
+| Worker | API Backend | Redis Pub/Sub | Notificar cambios de estado |
 
 ---
 
 ## 12. Estrategia de Manejo de Errores
 
-### Tipos de Errores y Estrategias
+### Tipos de Errores
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    CLASIFICACIÓN DE ERRORES                      │
-├─────────────────────┬───────────────────────────────────────────┤
-│   TRANSIENTES       │   PERMANENTES                             │
-│   (Reintentar)      │   (No reintentar)                        │
-├─────────────────────┼───────────────────────────────────────────┤
-│ • Timeout de BD     │ • Stock insuficiente                     │
-│ • Error de red      │ • Datos incompletos                      │
-│ • Deadlock          │ • Webhook inválido (HMAC)                │
-│ • Connection reset  │ • Orden duplicada (ya procesada)         │
-│ • Redis unavailable │ • Material no existe                     │
-└─────────────────────┴───────────────────────────────────────────┘
-```
+| Tipo | Ejemplo | Estrategia |
+|---|---|---|
+| **Transitorio** | Timeout de BD, error de red | Reintento con backoff exponencial (BullMQ) |
+| **Negocio** | Stock insuficiente, datos inválidos | Marcar orden como FAILED, sin reintento |
+| **Sistema** | Caída del proceso | Dead letter queue, alerta |
 
-### Matriz de Reintentos
+### Configuración de Reintentos (BullMQ)
 
-| Error | Reintentos | Backoff | DLQ | Acción |
-|---|---|---|---|---|
-| Timeout de BD | 3 | Exponencial (2s, 4s, 8s) | Sí | Reintentar automáticamente |
-| Deadlock | 3 | Exponencial (1s, 2s, 4s) | Sí | Reintentar automáticamente |
-| Redis unavailable | 3 | Exponencial (2s, 4s, 8s) | Sí | Reintentar automáticamente |
-| Stock insuficiente | 0 | N/A | No | Marcar FAILED inmediatamente |
-| Datos incompletos | 0 | N/A | No | Marcar FAILED inmediatamente |
-| HMAC inválido | 0 | N/A | No | Rechazar con 401 |
-| Orden ya procesada | 0 | N/A | No | Responder 200 OK (idempotencia) |
-
-### Flujo de Manejo de Errores
-
-```mermaid
-flowchart TD
-    A[Error Detectado] --> B{¿Es Transitorio?}
-    
-    B -->|Sí| C{¿Reintentos < Máximo?}
-    C -->|Sí| D[Incrementar contador]
-    D --> E[Backoff Exponencial]
-    E --> F[Reintentar operación]
-    F --> G{¿Éxito?}
-    G -->|Sí| H[Continuar procesamiento]
-    G -->|No| C
-    
-    C -->|No| I[Mover a Dead Letter Queue]
-    I --> J[Registrar en Audit Log]
-    J --> K[Publicar evento JobFailed]
-    K --> L[Alertar administrador]
-    
-    B -->|No| M[Clasificar error]
-    M --> N{¿Stock insuficiente?}
-    N -->|Sí| O[Rollback transaccional]
-    O --> P[Marcar orden como FAILED]
-    P --> Q[Registrar motivo]
-    Q --> R[Publicar evento OrderFailed]
-    
-    N -->|No| S[Marcar orden como FAILED]
-    S --> T[Registrar en Audit Log]
-    T --> U[Publicar evento OrderFailed]
-```
+| Parámetro | Valor |
+|---|---|
+| Máximo de reintentos | 3 |
+| Backoff | Exponencial: 2s, 4s, 8s |
+| Dead Letter Queue | Después de 3 fallos |
 
 ---
 
 ## 13. Consideraciones de Seguridad
 
-### Capas de Seguridad
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    CAPA 1: PERÍMETRO                         │
-│  • HTTPS obligatorio para todas las comunicaciones externas │
-│  • Rate limiting en endpoint de webhooks (100 req/min)      │
-│  • CORS configurado para dominios permitidos                │
-│  • WAF (Web Application Firewall) para producción           │
-├─────────────────────────────────────────────────────────────┤
-│                    CAPA 2: AUTENTICACIÓN                      │
-│  • HMAC-SHA256 para webhooks de Shopify                     │
-│  • JWT para acceso al dashboard                             │
-│  • API keys para integraciones internas                      │
-│  • Rotación de secretos cada 90 días                         │
-├─────────────────────────────────────────────────────────────┤
-│                    CAPA 3: AUTORIZACIÓN                       │
-│  • RBAC para usuarios del dashboard                         │
-│  • Scopes limitados para API keys                           │
-│  • Principio de mínimo privilegio                          │
-├─────────────────────────────────────────────────────────────┤
-│                    CAPA 4: DATOS                              │
-│  • No almacenar datos sensibles de clientes innecesariamente│
-│  • Encriptación en tránsito (TLS 1.3)                       │
-│  • Encriptación en reposo para datos sensibles              │
-│  • Sanitización de inputs                                   │
-│  • Parameterized queries (previene SQL injection)           │
-├─────────────────────────────────────────────────────────────┤
-│                    CAPA 5: AUDITORÍA                          │
-│  • Log de todos los accesos y operaciones                   │
-│  • Alertas de seguridad (intentos de HMAC inválido)         │
-│  • Retención de logs: 1 año                                 │
-│  • Inmutabilidad de audit_logs                              │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Validación HMAC (Detalle)
-
-```typescript
-// Pseudocódigo de validación HMAC
-function validateShopifyWebhook(payload: string, signature: string, secret: string): boolean {
-  const hmac = crypto.createHmac('sha256', secret);
-  hmac.update(payload, 'utf8');
-  const computedSignature = hmac.digest('base64');
-  return crypto.timingSafeEqual(
-    Buffer.from(computedSignature),
-    Buffer.from(signature)
-  );
-}
-```
+| Aspecto | Implementación |
+|---|---|
+| **Autenticación de webhooks** | Validación HMAC-SHA256 con secreto compartido |
+| **Comunicación** | HTTPS para todas las APIs expuestas |
+| **Secreto HMAC** | Almacenado como variable de entorno, nunca en logs |
+| **Idempotencia** | UNIQUE constraint + ON CONFLICT DO NOTHING |
 
 ---
 
 ## 14. Consideraciones de Escalabilidad
 
-### Estrategia de Escalado Horizontal
-
-```
-                    ┌─────────────────┐
-                    │   Load Balancer  │
-                    │   (Nginx/Traefik)│
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-        ┌─────▼─────┐ ┌─────▼─────┐ ┌─────▼─────┐
-        │  API Bk   │ │  API Bk   │ │  API Bk   │
-        │  Inst. 1  │ │  Inst. 2  │ │  Inst. N  │
-        └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
-              │              │              │
-              └──────────────┼──────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │  Redis Cluster   │
-                    │  (BullMQ + Cache)│
-                    └────────┬────────┘
-                             │
-              ┌──────────────┼──────────────┐
-              │              │              │
-        ┌─────▼─────┐ ┌─────▼─────┐ ┌─────▼─────┐
-        │  Worker   │ │  Worker   │ │  Worker   │
-        │  Inst. 1  │ │  Inst. 2  │ │  Inst. N  │
-        └─────┬─────┘ └─────┬─────┘ └─────┬─────┘
-              │              │              │
-              └──────────────┼──────────────┘
-                             │
-                    ┌────────▼────────┐
-                    │   PostgreSQL    │
-                    │  Primary +      │
-                    │  Read Replicas  │
-                    └─────────────────┘
-```
-
-### Métricas de Escalabilidad
-
-| Componente | Límite Actual | Estrategia de Escalado | Límite Objetivo |
-|---|---|---|---|
-| API Backend | 2 instancias | Horizontal (stateless) | 10 instancias |
-| Worker | 2 instancias | Horizontal (BullMQ partition) | 20 instancias |
-| PostgreSQL | 1 primary | Read replicas + connection pooling | 1 primary + 3 replicas |
-| Redis | 1 instancia | Redis Cluster (3 masters + 3 replicas) | 6 nodos |
-| Frontend | 1 servidor estático | CDN + múltiples edge locations | Global CDN |
-
-### Estrategias de Escalado por Componente
-
-1. **API Backend:** Stateless, escala horizontal detrás de load balancer. Sesiones en Redis.
-2. **Worker:** BullMQ soporta múltiples consumidores concurrentes. Escalar workers independientemente de la API.
-3. **PostgreSQL:** PgBouncer para connection pooling. Read replicas para consultas del dashboard. Particionamiento de tablas de auditoría por fecha.
-4. **Redis:** Cluster mode para alta disponibilidad y sharding. Separar instancias para caché vs BullMQ.
-5. **Frontend:** Assets estáticos servidos vía CDN. API calls con caché HTTP agresiva.
+| Aspecto | Estrategia |
+|---|---|
+| **Procesamiento de órdenes** | Workers BullMQ escalables horizontalmente |
+| **Base de datos** | Índices optimizados, conexiones pool |
+| **Caché** | Redis para consultas frecuentes del dashboard |
+| **Frontend** | SPA con lazy loading y paginación |
 
 ---
 
-## Apéndice: Estructura de Directorios del Proyecto
-
-```
-project-root/
-├── docs/
-│   ├── architecture.md              # Este documento
-│   ├── product-analysis.md          # Análisis de producto
-│   └── adr/                         # Architecture Decision Records
-│       ├── ADR-001-database.md
-│       ├── ADR-002-queue.md
-│       └── ...
-├── backend/
-│   ├── src/
-│   │   ├── main.ts                  # Entry point
-│   │   ├── app.module.ts            # Root module
-│   │   ├── config/                  # Configuración
-│   │   │   ├── database.config.ts
-│   │   │   ├── redis.config.ts
-│   │   │   └── shopify.config.ts
-│   │   ├── modules/
-│   │   │   ├── shopify-integration/ # Shopify Integration BC
-│   │   │   │   ├── adapters/
-│   │   │   │   │   ├── controllers/
-│   │   │   │   │   │   └── webhook.controller.ts
-│   │   │   │   │   └── repositories/
-│   │   │   │   │       └── webhook-event.repository.ts
-│   │   │   │   ├── application/
-│   │   │   │   │   └── webhook-application.service.ts
-│   │   │   │   └── domain/
-│   │   │   │       ├── services/
-│   │   │   │       │   ├── hmac-validator.service.ts
-│   │   │   │       │   └── idempotency.service.ts
-│   │   │   │       └── events/
-│   │   │   │           └── order-received.event.ts
-│   │   │   ├── orders/              # Orders BC
-│   │   │   │   ├── adapters/
-│   │   │   │   │   ├── controllers/
-│   │   │   │   │   │   └── dashboard.controller.ts
-│   │   │   │   │   └── repositories/
-│   │   │   │   │       ├── order.repository.ts
-│   │   │   │   │       └── order-item.repository.ts
-│   │   │   │   ├── application/
-│   │   │   │   │   └── order-processor.service.ts
-│   │   │   │   └── domain/
-│   │   │   │       ├── order.entity.ts
-│   │   │   │       ├── order-item.entity.ts
-│   │   │   │       ├── order-state-machine.ts
-│   │   │   │       └── events/
-│   │   │   │           ├── order-completed.event.ts
-│   │   │   │           └── order-failed.event.ts
-│   │   │   ├── inventory/           # Inventory BC
-│   │   │   │   ├── adapters/
-│   │   │   │   │   └── repositories/
-│   │   │   │   │       ├── material.repository.ts
-│   │   │   │   │       ├── reservation.repository.ts
-│   │   │   │   │       └── inventory-transaction.repository.ts
-│   │   │   │   ├── application/
-│   │   │   │   │   └── inventory-application.service.ts
-│   │   │   │   └── domain/
-│   │   │   │       ├── material.entity.ts
-│   │   │   │       ├── inventory-domain.service.ts
-│   │   │   │       └── events/
-│   │   │   │           ├── inventory-reserved.event.ts
-│   │   │   │           └── low-stock-alert.event.ts
-│   │   │   └── packaging/           # Packaging BC
-│   │   │       └── domain/
-│   │   │           └── material-calculator.service.ts
-│   │   ├── infrastructure/
-│   │   │   ├── bullmq/
-│   │   │   │   ├── bullmq.module.ts
-│   │   │   │   ├── producers/
-│   │   │   │   │   └── order-processing.producer.ts
-│   │   │   │   └── consumers/
-│   │   │   │       └── order-processing.consumer.ts
-│   │   │   ├── redis/
-│   │   │   │   ├── redis.module.ts
-│   │   │   │   ├── cache.service.ts
-│   │   │   │   └── pubsub.service.ts
-│   │   │   └── database/
-│   │   │       ├── database.module.ts
-│   │   │       └── migrations/
-│   │   └── shared/
-│   │       ├── event-bus/
-│   │       │   └── event-bus.module.ts
-│   │       └── interceptors/
-│   │           └── logging.interceptor.ts
-│   ├── test/
-│   ├── Dockerfile
-│   └── package.json
-├── frontend/
-│   ├── src/
-│   │   ├── main.ts
-│   │   ├── App.vue
-│   │   ├── stores/                  # Pinia stores
-│   │   │   ├── orders.store.ts
-│   │   │   ├── inventory.store.ts
-│   │   │   └── alerts.store.ts
-│   │   ├── components/
-│   │   │   ├── dashboard/
-│   │   │   │   ├── OrdersTable.vue
-│   │   │   │   ├── InventoryPanel.vue
-│   │   │   │   ├── AlertsPanel.vue
-│   │   │   │   └── MetricsPanel.vue
-│   │   │   └── shared/
-│   │   │       ├── AppHeader.vue
-│   │   │       └── StatusBadge.vue
-│   │   ├── composables/
-│   │   │   ├── useOrders.ts
-│   │   │   ├── useInventory.ts
-│   │   │   └── useRealtime.ts
-│   │   ├── services/
-│   │   │   ├── api.service.ts
-│   │   │   └── sse.service.ts
-│   │   └── types/
-│   │       ├── order.types.ts
-│   │       └── inventory.types.ts
-│   ├── Dockerfile
-│   └── package.json
-├── legacy/
-│   ├── public/
-│   │   └── index.php                 # Endpoint /low-stock
-│   ├── src/
-│   │   └── LowStockController.php
-│   ├── Dockerfile
-│   └── composer.json
-├── docker-compose.yml
-├── docker-compose.prod.yml
-├── .env.example
-└── README.md
-```
-
----
-
-**Documento generado por:** OWL - Senior Software Architect & Tech Lead
-**Versión:** 1.0
-**Fecha:** 2024-01-20
-**Estado:** Aprobado
+**Documento generado por:** OWL — Senior Software Architect
+**Versión:** 3.0
+**Fecha:** 2025-07-15

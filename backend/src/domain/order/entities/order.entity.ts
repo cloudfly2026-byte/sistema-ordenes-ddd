@@ -58,6 +58,14 @@ export class Order {
     this._processedAt = props.processedAt;
   }
 
+  /**
+   * Reconstitute an existing order from persistence without triggering domain events.
+   * Used by repositories to rebuild the aggregate from the database.
+   */
+  static reconstitute(props: OrderProps): Order {
+    return new Order(props);
+  }
+
   static create(props: Omit<OrderProps, 'id' | 'status' | 'boxType' | 'errorMessage' | 'processedAt' | 'createdAt' | 'updatedAt'> & { id?: string }): Order {
     const now = new Date();
     const order = new Order({

@@ -8,17 +8,32 @@ export class JobExecution {
   @Column({ name: 'job_id' })
   jobId: string;
 
-  @Column({ name: 'order_id' })
-  orderId: string;
+  @Column({ name: 'queue_name', length: 128, default: 'order-processing' })
+  queueName: string;
 
-  @Column({ length: 20 })
+  @Column({ name: 'order_id', type: 'uuid', nullable: true })
+  orderId: string | null;
+
+  @Column({ type: 'enum', enum: ['PENDING', 'RUNNING', 'COMPLETED', 'FAILED', 'RETRYING'], default: 'PENDING' })
   status: string;
 
-  @Column({ name: 'attempt', type: 'int', default: 1 })
-  attempt: number;
+  @Column({ type: 'int', default: 0 })
+  attempts: number;
 
-  @Column({ name: 'error_message', nullable: true })
-  errorMessage: string | null;
+  @Column({ type: 'jsonb', nullable: true })
+  payload: Record<string, unknown> | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  result: Record<string, unknown> | null;
+
+  @Column({ type: 'text', nullable: true })
+  error: string | null;
+
+  @Column({ name: 'started_at', type: 'timestamptz', nullable: true })
+  startedAt: Date | null;
+
+  @Column({ name: 'completed_at', type: 'timestamptz', nullable: true })
+  completedAt: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -26,4 +41,3 @@ export class JobExecution {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 }
-

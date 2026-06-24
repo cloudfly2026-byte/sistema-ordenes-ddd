@@ -5,28 +5,30 @@ export class AuditLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'order_id', nullable: true })
-  orderId: string | null;
-
-  @Column({ name: 'material_id', nullable: true })
-  materialId: string | null;
-
-  @Column({ length: 100 })
-  action: string;
-
-  @Column({ name: 'entity_type', length: 50 })
+  @Column({ name: 'entity_type', length: 128 })
   entityType: string;
 
-  @Column({ name: 'entity_id' })
+  @Column({ name: 'entity_id', type: 'uuid' })
   entityId: string;
 
-  @Column({ type: 'jsonb', nullable: true })
-  details: Record<string, unknown> | null;
+  @Column({ length: 128 })
+  action: string;
 
-  @Column({ name: 'performed_by', length: 100, default: 'system' })
+  @Column({ name: 'old_values', type: 'jsonb', nullable: true })
+  oldValues: Record<string, unknown> | null;
+
+  @Column({ name: 'new_values', type: 'jsonb', nullable: true })
+  newValues: Record<string, unknown> | null;
+
+  @Column({ name: 'performed_by', length: 128, default: 'system' })
   performedBy: string;
 
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt: Date;
-}
+  @CreateDateColumn({ name: 'performed_at' })
+  performedAt: Date;
 
+  @Column({ name: 'ip_address', length: 45, nullable: true })
+  ipAddress: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  metadata: Record<string, unknown> | null;
+}

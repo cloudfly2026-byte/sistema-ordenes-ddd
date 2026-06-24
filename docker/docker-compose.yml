@@ -17,7 +17,7 @@ services:
       - DB_NAME=shopify_orders
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - SHOPIFY_WEBHOOK_SECRET=your-secret-here
+      - SHOPIFY_WEBHOOK_SECRET=1acd159469d9b7d35f9aa48fd9fcc100811d6371f4cd9be709691c163ff3eb54
     depends_on:
       postgres:
         condition: service_healthy
@@ -39,6 +39,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ../database/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
       - ../database/migrations/002_indexes.sql:/docker-entrypoint-initdb.d/002_indexes.sql
+      - ../database/migrations/003_seed_inventory.sql:/docker-entrypoint-initdb.d/003_seed_inventory.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -85,9 +86,11 @@ services:
     environment:
       - DB_HOST=postgres
       - DB_PORT=5432
-      - DB_USERNAME=postgres
+      - DB_USER=postgres
       - DB_PASSWORD=postgres
       - DB_NAME=shopify_orders
+      - DB_SSLMODE=disable
+      - APP_ENV=development
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,4 +105,3 @@ volumes:
 networks:
   app-network:
     driver: bridge
-
