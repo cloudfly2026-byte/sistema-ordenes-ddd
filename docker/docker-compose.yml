@@ -17,7 +17,7 @@ services:
       - DB_NAME=shopify_orders
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      - SHOPIFY_WEBHOOK_SECRET=1acd159469d9b7d35f9aa48fd9fcc100811d6371f4cd9be709691c163ff3eb54
+      - SHOPIFY_WEBHOOK_SECRET=${SHOPIFY_WEBHOOK_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
