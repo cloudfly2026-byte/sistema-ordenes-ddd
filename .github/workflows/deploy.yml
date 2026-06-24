@@ -1,0 +1,161 @@
+name: Build and Deploy
+
+# Se ejecuta al hacer push o merge a la rama master.
+# Construye las imagenes Docker de backend, frontend y legacy, las publica en
+# GitHub Container Registry (ghcr.io) y luego despliega en el VPS por SSH.
+#
+# Requiere configurar en GitHub (Settings > Secrets and variables > Actions):
+#
+# Secrets:
+#   VPS_HOST              - IP o dominio del VPS
+#   VPS_USER              - usuario SSH en el VPS
+#   VPS_SSH_PRIVATE_KEY    - llave privada SSH (par publico debe estar en
+#                            ~/.ssh/authorized_keys del usuario en el VPS)
+#   VPS_SSH_PORT           - puerto SSH (opcional, default 22)
+#   GHCR_PAT               - Personal Access Token con scope "read:packages",
+#                            usado por el VPS para hacer docker login en ghcr.io
+#   DB_USERNAME            - usuario de PostgreSQL en produccion
+#   DB_PASSWORD            - password de PostgreSQL en produccion
+#   DB_NAME                - nombre de la base de datos en produccion
+#   SHOPIFY_WEBHOOK_SECRET - secreto del webhook de Shopify
+#
+# Variables (no secretas):
+#   VPS_DEPLOY_PATH        - ruta absoluta en el VPS donde vive el proyecto
+#                            (ej. /opt/cloudfly o /home/deploy/sistema-ordenes)
+#
+# Tambien crea un "Environment" llamado "production" en GitHub (Settings >
+# Environments) para poder restringir o requerir aprobacion antes de desplegar.
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: Build & push ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - service: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - service: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+          - service: legacy
+            context: ./legacy
+            dockerfile: ./legacy/Dockerfile
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}-${{ matrix.service }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+
+      - name: Add VPS to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${{ secrets.VPS_SSH_PORT || '22' }}" -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Ensure deploy directory exists on VPS
+        env:
+          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -p "${{ secrets.VPS_SSH_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "mkdir -p '${VPS_DEPLOY_PATH}'"
+
+      - name: Copy docker-compose.prod.yml to VPS
+        env:
+          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH }}
+        run: |
+          scp -P "${{ secrets.VPS_SSH_PORT || '22' }}" docker-compose.prod.yml \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${VPS_DEPLOY_PATH}/docker-compose.yml"
+
+      - name: Copy database migrations to VPS
+        env:
+          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -p "${{ secrets.VPS_SSH_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "mkdir -p '${VPS_DEPLOY_PATH}/database/migrations'"
+          scp -P "${{ secrets.VPS_SSH_PORT || '22' }}" -r database/migrations/. \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:${VPS_DEPLOY_PATH}/database/migrations/"
+
+      - name: Write production .env on VPS
+        env:
+          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -p "${{ secrets.VPS_SSH_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "cat > '${VPS_DEPLOY_PATH}/.env'" << EOF
+          NODE_ENV=production
+          PORT=3000
+          DB_HOST=postgres
+          DB_PORT=5432
+          DB_USERNAME=${{ secrets.DB_USERNAME }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          DB_NAME=${{ secrets.DB_NAME }}
+          REDIS_HOST=redis
+          REDIS_PORT=6379
+          SHOPIFY_WEBHOOK_SECRET=${{ secrets.SHOPIFY_WEBHOOK_SECRET }}
+          IMAGE_TAG=sha-${{ github.sha }}
+          EOF
+
+      - name: Log in to GHCR on VPS
+        run: |
+          ssh -p "${{ secrets.VPS_SSH_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "echo '${{ secrets.GHCR_PAT }}' | docker login ${{ env.REGISTRY }} -u '${{ github.actor }}' --password-stdin"
+
+      - name: Pull images and restart stack
+        env:
+          VPS_DEPLOY_PATH: ${{ vars.VPS_DEPLOY_PATH }}
+        run: |
+          ssh -p "${{ secrets.VPS_SSH_PORT || '22' }}" "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "cd '${VPS_DEPLOY_PATH}' && docker compose pull && docker compose up -d && docker image prune -f"
