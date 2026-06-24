@@ -1,4 +1,15 @@
-import { Controller, Post, Headers, Body, HttpCode, HttpStatus, UseGuards, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Post,
+  Headers,
+  Body,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ShopifyHmacGuard } from '../guards/shopify-hmac.guard';
@@ -30,30 +41,33 @@ export class WebhookController {
     this.logger.log(`Received Shopify webhook: ${topic} (event: ${shopifyEventId})`);
 
     // Idempotency: insert into webhook_events with ON CONFLICT DO NOTHING
-    if (shopifyEventId) {
-      try {
-        const result = await this.webhookEventRepo
-          .createQueryBuilder()
-          .insert()
-          .into(WebhookEvent)
-          .values({
-            shopifyEventId,
-            topic,
-            shopDomain: shopDomain ?? 'unknown',
-            payload,
-            status: 'PENDING',
-          })
-          .orIgnore()
-          .execute();
+    if (!shopifyEventId) {
+      throw new BadRequestException('Missing required Shopify event id header');
+    }
 
-        // If no row was inserted (conflict), this is a duplicate
-        if (result.raw?.length === 0) {
-          this.logger.log(`Duplicate webhook event: ${shopifyEventId}`);
-          return { received: true, duplicate: true };
-        }
-      } catch (error) {
-        this.logger.error(`Error recording webhook event: ${error.message}`);
+    try {
+      const result = await this.webhookEventRepo
+        .createQueryBuilder()
+        .insert()
+        .into(WebhookEvent)
+        .values({
+          shopifyEventId,
+          topic,
+          shopDomain: shopDomain ?? 'unknown',
+          payload,
+          status: 'PENDING',
+        })
+        .orIgnore()
+        .execute();
+
+      // If no row was inserted (conflict), this is a duplicate
+      if (result.raw?.length === 0) {
+        this.logger.log(`Duplicate webhook event: ${shopifyEventId}`);
+        return { received: true, duplicate: true };
       }
+    } catch (error) {
+      this.logger.error(`Error recording webhook event: ${error.message}`);
+      throw new ServiceUnavailableException('Could not record webhook event');
     }
 
     try {
