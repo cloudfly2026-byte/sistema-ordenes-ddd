@@ -298,6 +298,37 @@ cd project-root
 # Configurar variables de entorno
 cp .env.example .env
 
+### Variables de Entorno
+
+El proyecto usa un archivo `.env` para las credenciales y configuracion sensible (no se versiona en git, ver `.gitignore`).
+
+1. Copia la plantilla a partir de `backend/.env.example`:
+
+   ```bash
+   cp backend/.env.example backend/.env
+   ```
+
+2. Completa los valores en `backend/.env`:
+
+   | Variable | Descripcion |
+   |---|---|
+   | `NODE_ENV` | Entorno de ejecucion (`development`, `production`, etc.) |
+   | `PORT` | Puerto donde corre la API backend |
+   | `DB_HOST` | Host de PostgreSQL |
+   | `DB_PORT` | Puerto de PostgreSQL |
+   | `DB_USERNAME` | Usuario de la base de datos |
+   | `DB_PASSWORD` | Password de la base de datos |
+   | `DB_NAME` | Nombre de la base de datos |
+   | `REDIS_HOST` | Host de Redis |
+   | `REDIS_PORT` | Puerto de Redis |
+   | `REDIS_PASSWORD` | Password de Redis (vacio en local) |
+   | `SHOPIFY_WEBHOOK_SECRET` | Secreto compartido para validar la firma HMAC de los webhooks de Shopify |
+   | `SHOPIFY_API_KEY` | API Key de la app de Shopify (Partner Dashboard) |
+   | `SHOPIFY_API_SECRET` | API Secret de la app de Shopify (Partner Dashboard) |
+
+   > **Importante:** nunca hardcodees estos valores en el codigo ni los subas al repositorio. `.env` esta excluido via `.gitignore`; usa siempre `process.env.<VARIABLE>` en el codigo y `.env.example` como referencia de las claves esperadas (sin valores reales).
+
+
 # Levantar todos los servicios
 docker-compose -f docker/docker-compose.yml up -d --build
 ```
